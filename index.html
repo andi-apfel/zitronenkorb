@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Zitronenkorb</title>
+<meta name="description" content="Gemeinsame Einkaufsliste von Hanne und Andi">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Zitronenkorb">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f3f6ec" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121a12" media="(prefers-color-scheme: dark)">
+<meta name="referrer" content="no-referrer">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <h1 class="brand">Zitronenkorb</h1>
+    <button id="syncBtn" class="syncbtn" type="button" aria-label="Abgleich und Einstellungen">
+      <span class="dot" aria-hidden="true"></span><span class="synctxt"></span>
+    </button>
+    <button id="setBtn" class="iconbtn" type="button" aria-label="Einstellungen">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M12 8.6a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 0 0 0-6.8Zm8.3 4.5.1-1.1-.1-1.1 2-1.6a.5.5 0 0 0 .1-.6l-1.9-3.3a.5.5 0 0 0-.6-.2l-2.4 1a7.5 7.5 0 0 0-1.9-1.1L15.2 2.4a.5.5 0 0 0-.5-.4h-3.8a.5.5 0 0 0-.5.4l-.4 2.6c-.7.3-1.3.6-1.9 1.1l-2.4-1a.5.5 0 0 0-.6.2L3.2 8.6a.5.5 0 0 0 .1.6l2 1.6-.1 1.2.1 1.1-2 1.6a.5.5 0 0 0-.1.6l1.9 3.3c.1.2.4.3.6.2l2.4-1c.6.5 1.2.8 1.9 1.1l.4 2.6c0 .2.3.4.5.4h3.8c.2 0 .5-.2.5-.4l.4-2.6c.7-.3 1.3-.6 1.9-1.1l2.4 1c.2.1.5 0 .6-.2l1.9-3.3a.5.5 0 0 0-.1-.6l-2-1.6Z"/></svg>
+    </button>
+  </header>
+
+  <div class="searchwrap">
+    <label class="search">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13Zm5-1.5L20 20"/></svg>
+      <input id="q" type="search" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="done" aria-label="Suchen oder hinzufügen">
+      <button id="qClear" class="qclear" type="button" aria-label="Eingabe löschen" hidden>
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </label>
+    <nav id="jump" class="jump" aria-label="Kategorien" hidden></nav>
+  </div>
+
+  <main id="main" tabindex="-1"></main>
+
+  <nav class="tabs" aria-label="Bereiche">
+    <button type="button" data-tab="liste">Einkaufsliste<span class="badge" id="badge"></span></button>
+    <button type="button" data-tab="fundus">Fundus</button>
+  </nav>
+</div>
+
+<div id="sheet" class="sheet" hidden>
+  <div class="sheet-bg" data-act="close"></div>
+  <div class="sheet-card" role="dialog" aria-modal="true"></div>
+</div>
+<div id="welcome" class="welcome" hidden></div>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="config.js"></script>
+<script src="seed.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
