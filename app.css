@@ -287,3 +287,48 @@ main { padding: 0 16px; outline: 0; }
   .brand { font-size: 26px; }
   .qtyctl .amt { min-width: 52px; font-size: 15px; }
 }
+
+/* ── Vier Bereiche: kurze Namen, lange erst auf breiten Bildschirmen ── */
+.tabs .lg { display: none; }
+.tabs .sh { display: inline; }
+@media (min-width: 600px) {
+  .tabs .lg { display: inline; }
+  .tabs .sh { display: none; }
+}
+@media (max-width: 370px) { .tabs button { font-size: 14px; } }
+
+/* ── Rezepte ── */
+.tag.plain { background: transparent; border: 1px solid var(--line); color: var(--muted); font-weight: 500; }
+.week .weeknav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 10px 0 4px; font-weight: 600; }
+.days { list-style: none; margin: 0; padding: 0; }
+.day { display: grid; grid-template-columns: 52px 1fr 44px; align-items: center; gap: 6px; min-height: 52px; border-bottom: 1px solid var(--line); padding: 4px 0; }
+.day.today { background: var(--lemon-soft); border-radius: 10px; padding-left: 6px; padding-right: 2px; border-bottom-color: transparent; }
+.dname { font-family: var(--head); font-weight: 700; font-size: 17px; line-height: 1.1; }
+.dname small { display: block; font-family: var(--body); font-weight: 500; font-size: 12.5px; color: var(--muted); }
+.meals { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.meal { min-height: 36px; padding: 4px 12px; border-radius: 10px; border: 1.5px solid var(--ink); background: var(--surface); text-align: left; font-size: 15px; font-weight: 600; color: var(--ink); max-width: 100%; overflow-wrap: anywhere; }
+.meal.done { border-color: var(--line); color: var(--muted); text-decoration: line-through; text-decoration-color: var(--leaf); font-weight: 500; }
+.week .finish { margin-top: 12px; }
+
+.recipe h3, .sheet h3 { font-family: var(--head); font-size: 19px; font-weight: 700; margin: 22px 0 6px; letter-spacing: -0.015em; }
+.servrow { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; font-weight: 600; }
+.stepper.small button { width: 44px; height: 44px; border-radius: 22px; font-size: 22px; }
+.stepper.small output { min-width: 44px; text-align: center; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ings .row.ing { align-items: flex-start; gap: 12px; padding: 10px 0; min-height: 0; }
+.ings .amt.lead { width: 78px; flex: none; text-align: right; color: var(--ink); font-weight: 600; padding-top: 1px; }
+.note { color: var(--muted); font-size: 14px; }
+.steps { padding-left: 1.3em; margin: 0; }
+.steps li { margin: 0 0 10px; padding-left: 4px; line-height: 1.5; max-width: 62ch; }
+.notes { white-space: pre-wrap; margin: 0; color: var(--ink); }
+.source { margin: 18px 0 0; }
+.source a { color: var(--leaf); font-weight: 600; }
+.vegwarn { margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); font-size: 15px; font-weight: 600; }
+.plannote { margin: 6px 0 0; font-weight: 600; color: var(--leaf); }
+.text.area { height: auto; padding: 12px 14px; line-height: 1.45; resize: vertical; font-family: var(--body); }
+.ingprev { margin-top: 10px; }
+.ingprev .prevhead { margin: 0 0 6px; color: var(--muted); font-size: 14px; font-weight: 600; }
+.ingprev ul { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.ingprev li { display: flex; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 15px; align-items: baseline; }
+.ingprev li .amt { width: 86px; flex: none; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.shop .main.static { cursor: default; }
+.daychips .chip { height: 44px; padding: 0 14px; }

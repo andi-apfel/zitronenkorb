@@ -4,7 +4,7 @@
 
 const CFG = window.ZK_CONFIG || {};
 const UNITS = window.ZK_UNITS;
-const VERSION = '1.1';
+const VERSION = '1.2';
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const rid = (n = 12) => { const a = 'abcdefghijkmnopqrstuvwxyz23456789'; const b = crypto.getRandomValues(new Uint8Array(n)); return Array.from(b, (x) => a[x % a.length]).join(''); };
@@ -494,6 +494,7 @@ function renderLager() {
 }
 
 function renderSearch() {
+  if (UI.tab === 'rezepte' && typeof renderRecipeSearch === 'function') return renderRecipeSearch();
   const p = parseEntry(UI.q);
   const hits = search(p.name || UI.q);
   const exact = findItem(p.name);
@@ -771,6 +772,7 @@ function toast(msg, undo) {
 
 // ── Eingaben ──
 function quickAdd() {
+  if (UI.tab === 'rezepte') { const b = document.querySelector('#main [data-act="openrecipe"]') || document.querySelector('#main [data-act="newrecipe"]'); if (b) b.click(); return; }
   const p = parseEntry(UI.q);
   if (!p.name) return;
   const exact = findItem(p.name);

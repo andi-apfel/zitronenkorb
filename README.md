@@ -8,8 +8,12 @@ Gemeinsame Einkaufsliste von Hanne und Andi. Schwesterprojekt der [Zitronenpress
 - **Zitronenlager:** alles in Küche und Vorrat, alphabetisch, Plus/Minus pro Artikel. „Nachkaufen ab“ setzt einen Artikel
   automatisch auf die Liste, sobald der Bestand darauf fällt.
 - **Fundus:** alle bekannten Artikel alphabetisch als Schnellauswahl. Antippen → „Wie viel?“ → ins Lager oder auf die Liste.
+- **Rezepte:** Zutaten Zeile für Zeile eintippen oder einfügen („500 g Spaghetti“, „½ TL Salz“, „2 Zehen Knoblauch“),
+  die App ordnet sie dem Fundus zu und warnt bei vermutlich nicht vegetarischen Zutaten. Portionen umrechnen,
+  Abgleich mit dem Lager, „Fehlendes auf die Liste“ mit Vorauswahl, „Gekocht“ zieht die Zutaten vom Lager ab.
+- **Wochenplan:** Rezepte auf Tage legen, „Fehlendes für die Woche auf die Liste“ fasst alles zusammen.
 - Rückgängig, Live-Abgleich zwischen beiden Handys, offline nutzbar.
-- **Dateien:** `index.html` (Gerüst), `app.css` (Gestaltung), `app.js` (Logik und Abgleich), `seed.js` (Startkategorien und
+- **Dateien:** `index.html` (Gerüst), `app.css` (Gestaltung), `app.js` (Logik und Abgleich), `recipes.js` (Rezepte und Wochenplan), `seed.js` (Startkategorien und
   vegetarischer Grundfundus), `config.js` (öffentliche Supabase-Adresse), `sw.js` (Offline-Speicher).
 - **Daten:** Supabase, Projekt der Zitronenpresse. Tabelle `zk_records` ist gesperrt; Zugriff nur über die Funktionen
   `zk_pull`/`zk_push` mit dem geheimen Korb-Code (gespeichert wird nur dessen Hash). Einrichtung: `supabase/schema.sql`
@@ -18,8 +22,7 @@ Gemeinsame Einkaufsliste von Hanne und Andi. Schwesterprojekt der [Zitronenpress
 ## Geplant
 
 1. ~~Einkaufsliste mit Fundus, Laufweg und Abgleich~~
-2. ~~Zitronenlager mit Übernahme aus dem Einkauf und Mindestmengen~~
-   Rezepte mit Übertrag auf die Liste und Abgleich mit dem Lager
+2. ~~Zitronenlager mit Übernahme aus dem Einkauf und Mindestmengen~~, ~~Rezepte und Wochenplan~~
 3. Barcode-Scan (Open Food Facts)
 4. Rezept-Import per Link (strukturierte Rezeptdaten der Seite, Notausgang: Zutatenliste einfügen)
 5. Anschaffungen (Möbel und Größeres)
