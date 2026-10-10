@@ -26,8 +26,10 @@ Gemeinsame Einkaufsliste von Hanne und Andi. Schwesterprojekt der [Zitronenpress
 
 ## Geplant
 
+Fokus: Lebensmittel und Haushaltsbedarf.
+
+
 1. ~~Einkaufsliste mit Fundus, Laufweg und Abgleich~~
 2. ~~Zitronenlager mit Übernahme aus dem Einkauf und Mindestmengen~~, ~~Rezepte und Wochenplan~~
 3. Barcode-Scan (Open Food Facts)
 4. Rezept-Import per Link (strukturierte Rezeptdaten der Seite, Notausgang: Zutatenliste einfügen)
-5. Anschaffungen (Möbel und Größeres)
