@@ -358,3 +358,15 @@ main { padding: 0 16px; outline: 0; }
 .vmove { flex: none; height: 40px; padding: 0 9px; border-radius: 10px; border: 1.5px solid var(--line); background: transparent; font-size: 13px; font-weight: 600; color: var(--ink); }
 .vx { flex: none; width: 36px; height: 40px; border: 0; background: transparent; color: var(--muted); font-size: 22px; }
 @media (max-width: 370px) { .vamt { width: 74px; } .vmove { padding: 0 6px; } }
+.vlabel { margin-top: 14px; }
+.vlabel + .vbox { margin-top: -2px; }
+.vname {
+  width: 100%; min-width: 0; height: 40px; padding: 0 8px; margin-left: -8px; border-radius: 10px;
+  border: 1.5px solid transparent; background: transparent; color: var(--ink); font-size: 17px;
+}
+.vname:hover { border-color: var(--line); }
+.vname:focus { outline: 0; border-color: var(--ink); background: var(--bg); }
+.vrow .stack { gap: 2px; }
+.vname { border-radius: 0; border-width: 0 0 1.5px; border-bottom: 1.5px dashed var(--muted); padding: 0 2px; margin-left: 0; height: 38px; }
+.vname:hover { border-bottom-color: var(--ink); }
+.vname:focus { border-radius: 8px; border: 1.5px solid var(--ink); padding: 0 8px; }

@@ -98,7 +98,7 @@ function voiceRows(text, defaultMode) {
     const it = matchSpoken(e.name);
     let unit = e.unit;
     if (e.qty && !unit) unit = it && COUNT_UNITS.has(it.unit) ? it.unit : 'Stk';
-    const row = { target: e.target, itemId: it ? it.id : null, name: it ? it.name : cap(e.name), qty: e.qty, unit: e.qty ? unit : null, empty: e.empty, isNew: !it };
+    const row = { src: norm(e.name), target: e.target, itemId: it ? it.id : null, name: it ? it.name : cap(e.name), qty: e.qty, unit: e.qty ? unit : null, empty: e.empty, isNew: !it };
     const dupe = rows.find((r) => r.target === row.target && (row.itemId ? r.itemId === row.itemId : norm(r.name) === norm(row.name)));
     if (dupe) {
       if (row.qty && dupe.qty) { const c = convert(row.qty, row.unit, dupe.unit); if (c != null) dupe.qty = round3(dupe.qty + c); }
@@ -158,19 +158,21 @@ let rec = null, listening = false, voiceTimer = null;
 UI.voice = null;
 
 function openVoice() {
-  UI.voice = { mode: UI.tab === 'lager' ? 'lager' : 'liste', rows: [] };
+  UI.voice = { mode: UI.tab === 'lager' ? 'lager' : 'liste', rows: [], over: {} };
   openSheet(`<h2>Sprechen oder diktieren</h2>
     <div class="seg" role="radiogroup" aria-label="Wohin, wenn nichts dazu gesagt wird">
       <button type="button" role="radio" data-act="vmode" data-v="liste">Auf die Liste</button>
       <button type="button" role="radio" data-act="vmode" data-v="lager">Ins Lager</button>
     </div>
     <p class="sub vsub">Gilt für alles, wozu du nichts sagst. „Haben wir“ geht ins Lager, „brauchen wir“ und „ist alle“ auf die Liste.</p>
+    <label class="field vlabel" for="vText"><span>Erkannter Text, hier kannst du jederzeit korrigieren</span></label>
     <div class="vbox">
       <textarea id="vText" class="text area" rows="4" placeholder="z. B.: Im Lager haben wir zwei Liter Milch, sechs Eier und ein Kilo Mehl. Wir brauchen Butter, Zitronen und Spülmittel."></textarea>
       ${SR ? `<button class="micbig" type="button" data-act="vlisten" id="vMic">${MIC}<span>Zuhören</span></button>` : ''}
     </div>
     <p class="hint" id="vHint">${SR ? 'Tippe auf „Zuhören“ und sprich. Alternativ ins Feld tippen und das Mikrofon der Tastatur nutzen.' : 'Tippe ins Feld und nutze das Mikrofon unten auf der Tastatur zum Diktieren.'}</p>
     <div id="vPrev" aria-live="polite"></div>
+    <datalist id="fundusNames">${items().map((i) => i.name).sort((a, b) => a.localeCompare(b, 'de')).map((n) => `<option value="${esc(n)}"></option>`).join('')}</datalist>
     <p class="err" id="fErr" hidden></p>
     <div class="actions"><button class="btn primary" type="button" data-act="vgo" id="vGo" disabled>Nichts erkannt</button>
       <button class="btn quiet" type="button" data-act="vclose">Abbrechen</button></div>`, 'voice');
@@ -185,9 +187,23 @@ function setVoiceMode(m) {
 function reparseVoice() {
   const t = $('#vText');
   if (!t || !UI.voice) return;
-  UI.voice.rows = voiceRows(t.value, UI.voice.mode);
+  // Korrekturen aus der Vorschau bleiben erhalten, auch wenn der Text danach noch geändert wird
+  const over = UI.voice.over;
+  UI.voice.rows = voiceRows(t.value, UI.voice.mode).filter((r) => !(over[r.src] && over[r.src].deleted)).map((r) => {
+    const o = over[r.src];
+    if (!o) return r;
+    if (o.name) Object.assign(r, rowFor(o.name));
+    if (o.qty !== undefined) { r.qty = o.qty; r.unit = o.unit; }
+    if (o.target) r.target = o.target;
+    return r;
+  });
   renderVoicePreview();
 }
+function rowFor(name) {
+  const it = matchSpoken(name);
+  return { itemId: it ? it.id : null, name: it ? it.name : cap(name.trim()), isNew: !it };
+}
+const overOf = (r) => (UI.voice.over[r.src] = UI.voice.over[r.src] || {});
 function renderVoicePreview() {
   const box = $('#vPrev'); if (!box) return;
   const rows = UI.voice.rows;
@@ -199,14 +215,14 @@ function renderVoicePreview() {
       const ph = target === 'lager' && s && s.qty > 0 ? fmtQty(s.qty) + ' ' + s.unit : it ? fmtQty(it.qty) + ' ' + it.unit : '1 Stk';
       const tags = (r.isNew ? `<span class="tag list">neu: ${esc(catName(guessCat(r.name)))}</span>` : '') + (r.empty ? '<span class="tag low">ist alle</span>' : '');
       return `<li class="row vrow">
-        <span class="stack"><span class="name">${esc(r.name)}</span>${tags ? '<span class="tags">' + tags + '</span>' : ''}</span>
+        <span class="stack"><input class="vname" data-i="${i}" value="${esc(r.name)}" list="fundusNames" aria-label="Artikel" autocomplete="off" autocapitalize="sentences" enterkeyhint="done">${tags ? '<span class="tags">' + tags + '</span>' : ''}</span>
         <input class="vamt" data-i="${i}" value="${r.qty ? esc(fmtQty(r.qty) + ' ' + r.unit) : ''}" placeholder="${esc(ph)}" aria-label="Menge für ${esc(r.name)}" autocomplete="off">
         <button class="vmove" type="button" data-act="vtoggle" data-i="${i}" aria-label="${esc(r.name)} ${target === 'liste' ? 'stattdessen ins Lager' : 'stattdessen auf die Liste'}">${target === 'liste' ? 'Lager' : 'Liste'}</button>
         <button class="vx" type="button" data-act="vdel" data-i="${i}" aria-label="${esc(r.name)} entfernen">×</button>
       </li>`;
     }).join('')}</ul></section>`;
   };
-  box.innerHTML = rows.length ? '<p class="hint">Graue Mengen werden genommen, wenn du nichts einträgst: auf der Liste die übliche Menge, im Lager der bisherige Bestand.</p>' + group('liste', 'Auf die Liste') + group('lager', 'Ins Lager') : '';
+  box.innerHTML = rows.length ? '<p class="hint">Falsch verstanden? Tippe auf einen Namen oder eine Menge und ändere sie. Graue Mengen gelten, wenn du nichts einträgst: auf der Liste die übliche Menge, im Lager der bisherige Bestand.</p>' + group('liste', 'Auf die Liste') + group('lager', 'Ins Lager') : '';
   const go = $('#vGo');
   if (go) { go.disabled = !rows.length; go.textContent = rows.length ? rows.length + (rows.length === 1 ? ' Eintrag übernehmen' : ' Einträge übernehmen') : 'Nichts erkannt'; }
 }
@@ -250,16 +266,32 @@ document.addEventListener('input', (e) => {
     if (!r) return;
     const a = parseAmount(e.target.value);
     e.target.classList.toggle('bad', Number.isNaN(a.qty));
-    if (!Number.isNaN(a.qty)) { r.qty = a.qty; r.unit = a.unit; }
+    if (!Number.isNaN(a.qty)) { r.qty = a.qty; r.unit = a.unit; const o = overOf(r); o.qty = a.qty; o.unit = a.unit; }
   }
 });
+// Artikelname korrigiert: neu zuordnen (Fundus-Vorschläge kommen über die Datalist)
+document.addEventListener('change', (e) => {
+  if (!e.target || !e.target.classList || !e.target.classList.contains('vname') || !UI.voice) return;
+  const r = UI.voice.rows[Number(e.target.dataset.i)];
+  const val = e.target.value.trim();
+  if (!r) return;
+  if (!val) { e.target.value = r.name; return; }
+  Object.assign(r, rowFor(val));
+  overOf(r).name = val;
+  renderVoicePreview();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target && e.target.classList && (e.target.classList.contains('vname') || e.target.classList.contains('vamt'))) { e.preventDefault(); e.stopPropagation(); e.target.blur(); }
+}, true);
+// Wer ins Textfeld tippt, will korrigieren: Zuhören beenden, damit nichts überschrieben wird
+document.addEventListener('focusin', (e) => { if (e.target && e.target.id === 'vText' && listening) stopListening(); });
 
 Object.assign(actions, {
   voice: () => openVoice(),
   vmode: (b) => setVoiceMode(b.dataset.v),
   vlisten: () => { if (listening) stopListening(); else startListening(); },
-  vtoggle: (b) => { const r = UI.voice.rows[Number(b.dataset.i)]; if (r) { r.target = r.target === 'liste' ? 'lager' : 'liste'; renderVoicePreview(); } },
-  vdel: (b) => { UI.voice.rows.splice(Number(b.dataset.i), 1); renderVoicePreview(); },
+  vtoggle: (b) => { const r = UI.voice.rows[Number(b.dataset.i)]; if (r) { r.target = r.target === 'liste' ? 'lager' : 'liste'; overOf(r).target = r.target; renderVoicePreview(); } },
+  vdel: (b) => { const r = UI.voice.rows[Number(b.dataset.i)]; if (r) overOf(r).deleted = true; UI.voice.rows.splice(Number(b.dataset.i), 1); renderVoicePreview(); },
   vclose: () => { stopListening(); closeSheet(); },
   vgo: () => {
     if (document.querySelector('#vPrev .vamt.bad')) return showErr('Eine Menge ist nicht lesbar. Bitte so schreiben: „2 l“ oder „500 g“, oder das Feld leer lassen.');
