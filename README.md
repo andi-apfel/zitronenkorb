@@ -11,11 +11,14 @@ Gemeinsame Einkaufsliste von Hanne und Andi. Schwesterprojekt der [Zitronenpress
 - **Rezepte:** Zutaten Zeile für Zeile eintippen oder einfügen („500 g Spaghetti“, „½ TL Salz“, „2 Zehen Knoblauch“),
   die App ordnet sie dem Fundus zu und warnt bei vermutlich nicht vegetarischen Zutaten. Portionen umrechnen,
   Abgleich mit dem Lager, „Fehlendes auf die Liste“ mit Vorauswahl, „Gekocht“ zieht die Zutaten vom Lager ab.
+- **Was geht heute?** Vorschläge oben im Rezepte-Bereich, abgeleitet aus dem Lager: eigene Rezepte und 30 eingebaute
+  vegetarische Rezeptideen, bewertet nach Abdeckung (Grundzutaten wie Salz/Öl/Gewürze zählen wenig), fehlenden Hauptzutaten
+  und frischen Zutaten, die verbraucht werden; kürzlich Gekochtes rückt nach hinten. Ideen lassen sich übernehmen.
 - **Wochenplan:** Rezepte auf Tage legen, „Fehlendes für die Woche auf die Liste“ fasst alles zusammen.
 - **Sprache:** Mikrofon im Suchfeld. Frei sprechen oder diktieren („Im Lager haben wir zwei Liter Milch, wir brauchen
   Butter, die Haferflocken sind alle“); Vorschau mit Ziel je Eintrag, Mengen änderbar. Ins Lager gilt die genannte Menge als Bestand.
 - Rückgängig, Live-Abgleich zwischen beiden Handys, offline nutzbar.
-- **Dateien:** `index.html` (Gerüst), `app.css` (Gestaltung), `app.js` (Logik und Abgleich), `recipes.js` (Rezepte und Wochenplan), `voice.js` (Spracherfassung), `seed.js` (Startkategorien und
+- **Dateien:** `index.html` (Gerüst), `app.css` (Gestaltung), `app.js` (Logik und Abgleich), `recipes.js` (Rezepte und Wochenplan), `catalog.js` (Rezeptideen und Vorschläge), `voice.js` (Spracherfassung), `seed.js` (Startkategorien und
   vegetarischer Grundfundus), `config.js` (öffentliche Supabase-Adresse), `sw.js` (Offline-Speicher).
 - **Daten:** Supabase, Projekt der Zitronenpresse. Tabelle `zk_records` ist gesperrt; Zugriff nur über die Funktionen
   `zk_pull`/`zk_push` mit dem geheimen Korb-Code (gespeichert wird nur dessen Hash). Einrichtung: `supabase/schema.sql`

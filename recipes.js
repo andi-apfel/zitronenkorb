@@ -409,10 +409,11 @@ Object.assign(actions, {
   unplan: () => { const v = UI.rv; if (!v || v.date == null) return; closeSheet(); removeMeal(v.date, v.idx); },
   addmeal: (b) => {
     const date = b.dataset.date;
-    const rs = all('recipe').sort((a, c) => a.title.localeCompare(c.title, 'de', { sensitivity: 'base' }));
+    const own = (x) => typeof isOwn !== 'function' || isOwn(x);
+    const rs = all('recipe').sort((a, c) => (own(c) - own(a)) || a.title.localeCompare(c.title, 'de', { sensitivity: 'base' }));
     UI.rv = null;
     openSheet(`<h2>${esc(dayLabel(date))}</h2><p class="sub">Welches Rezept?</p>
-      ${rs.length ? `<ul class="rows">${rs.map((r) => `<li class="row"><button class="main" type="button" data-act="pickmeal" data-date="${date}" data-id="${esc(r.id)}"><span class="name">${esc(r.title)}</span><span class="amt">${r.servings} P.</span></button></li>`).join('')}</ul>`
+      ${rs.length ? `<ul class="rows">${rs.map((r) => `<li class="row"><button class="main" type="button" data-act="pickmeal" data-date="${date}" data-id="${esc(r.id)}"><span class="name">${esc(r.title)}${own(r) ? '' : ' <span class="tag plain">Idee</span>'}</span><span class="amt">${r.servings} P.</span></button></li>`).join('')}</ul>`
       : '<p>Noch keine Rezepte vorhanden.</p>'}
       <div class="actions"><button class="btn" type="button" data-act="newrecipe">Neues Rezept anlegen</button><button class="btn quiet" type="button" data-act="close">Abbrechen</button></div>`, 'pickmeal');
   },
@@ -445,7 +446,7 @@ Object.assign(actions, {
         if (p.note) ing.note = p.note;
         return ing;
       });
-      put('recipe', Object.assign({}, old, { id, title, servings: serv, ings, steps, url, tags, notes, created: old.created || Date.now() }));
+      put('recipe', Object.assign({}, old, { id, title, servings: serv, ings, steps, url, tags, notes, created: old.created || Date.now() }, old.catalog ? { saved: true } : {}));
     });
     UI.rv = null;
     openRecipe(id);

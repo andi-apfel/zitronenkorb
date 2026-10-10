@@ -370,3 +370,23 @@ main { padding: 0 16px; outline: 0; }
 .vname { border-radius: 0; border-width: 0 0 1.5px; border-bottom: 1.5px dashed var(--muted); padding: 0 2px; margin-left: 0; height: 38px; }
 .vname:hover { border-bottom-color: var(--ink); }
 .vname:focus { border-radius: 8px; border: 1.5px solid var(--ink); padding: 0 8px; }
+
+/* ── Vorschläge aus dem Lager ── */
+.ideas .ghead small { font-weight: 500; }
+.ideas-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+.idea button {
+  width: 100%; text-align: left; display: grid; gap: 6px; padding: 12px 14px; border-radius: 14px;
+  border: 1.5px solid var(--line); background: var(--surface); color: var(--ink);
+}
+.idea button:active { border-color: var(--ink); }
+.ihead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.ititle { font-family: var(--head); font-weight: 700; font-size: 18px; letter-spacing: -0.015em; line-height: 1.2; }
+.imeter { display: block; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.imeter span { display: block; height: 100%; border-radius: 4px; background: var(--lemon); box-shadow: inset 0 0 0 1px rgba(160, 120, 0, .25); }
+.iline { font-size: 14.5px; line-height: 1.35; }
+.iline b { font-weight: 650; }
+.iline.muted { color: var(--muted); }
+.btn.more { width: 100%; margin-top: 10px; height: 46px; font-size: 16px; }
+.ideabar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; padding: 8px 8px 8px 12px; border-radius: 12px; background: var(--lemon-soft); color: var(--lemon-ink); font-size: 14.5px; font-weight: 600; }
+.ideabar .btn { height: 40px; padding: 0 12px; font-size: 15px; background: var(--surface); flex: none; }
+.sheet .ideas-list + .actions { margin-top: 16px; }
