@@ -39,6 +39,11 @@ function parseIngredient(raw) {
   rest = rest.replace(/^(von|vom|der|die|das)\s+/i, '').trim();
   if (!rest) return [];
   if (qty == null && unit) qty = 1;
+  if (note) {
+    const first = note.split(/[,;]/)[0].trim();
+    const combo = first && first.split(' ').length <= 2 && (findItem(first + ' ' + rest) || findItem(rest + ' ' + first));
+    if (combo) { rest = combo.name; note = note.slice(first.length).replace(/^[,;]\s*/, ''); }
+  }
   if (qty == null && / und /i.test(rest)) return rest.split(/ und /i).map((x) => ({ name: x.trim(), qty: null, unit: null, note }));
   return [{ name: rest, qty: qty > 0 ? qty : null, unit: qty > 0 ? (unit || 'Stk') : unit, note }];
 }
@@ -47,6 +52,10 @@ const stemWord = (w) => w.replace(/(en|n|e|s)$/, '');
 function matchIngredient(name) {
   const n = norm(name);
   if (!n) return null;
+  if (/ oder /.test(n)) {
+    for (const part of String(name).split(/ oder /i)) { const m = matchIngredient(part.trim()); if (m) return m; }
+    return null;
+  }
   if (ING_ALIAS[n]) { const f = findItem(ING_ALIAS[n]); if (f) return f; }
   const exact = findItem(name);
   if (exact) return exact;
