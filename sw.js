@@ -1,6 +1,6 @@
 // Offline-Speicher: Die App lädt auch ohne Netz (z. B. im Keller vom Supermarkt).
 // Eigene Dateien: zuerst aus dem Netz (damit Updates sofort ankommen), sonst aus dem Speicher.
-const CACHE = 'zitronenkorb-v8';
+const CACHE = 'zitronenkorb-v9';
 const CORE = ['./', './index.html', './app.css', './app.js', './recipes.js', './catalog.js', './import.js', './voice.js', './seed.js', './config.js', './icon-180.png'];
 
 self.addEventListener('install', (e) => {
@@ -22,7 +22,9 @@ self.addEventListener('fetch', (e) => {
     e.respondWith((async () => {
       const cache = await caches.open(CACHE);
       try {
-        const res = await Promise.race([fetch(req), timeout(4000)]);
+        // immer beim Server nachfragen (kein HTTP-Zwischenspeicher), damit Updates sofort ankommen
+        const fresh = req.mode === 'navigate' ? fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' }) : fetch(req, { cache: 'no-cache' });
+        const res = await Promise.race([fresh, timeout(4000)]);
         if (res && res.ok) cache.put(req, res.clone());
         return res;
       } catch (err) {
