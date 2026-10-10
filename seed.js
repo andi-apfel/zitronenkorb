@@ -42,7 +42,7 @@ window.ZK_SEED_ITEMS = [
 
   ['Tofu', 'c-veggie', 400, 'g'], ['Räuchertofu', 'c-veggie', 200, 'g'], ['Veggie-Hack', 'c-veggie', 1, 'Pck'], ['Tempeh', 'c-veggie', 1, 'Pck'],
 
-  ['Spaghetti', 'c-nudeln', 500, 'g'], ['Penne', 'c-nudeln', 500, 'g'], ['Reis', 'c-nudeln', 1, 'kg'],
+  ['Nudeln', 'c-nudeln', 500, 'g'], ['Spaghetti', 'c-nudeln', 500, 'g'], ['Penne', 'c-nudeln', 500, 'g'], ['Reis', 'c-nudeln', 1, 'kg'],
   ['Couscous', 'c-nudeln', 500, 'g'], ['Bulgur', 'c-nudeln', 500, 'g'], ['Rote Linsen', 'c-nudeln', 500, 'g'],
 
   ['Passierte Tomaten', 'c-konserven', 500, 'g'], ['Gehackte Tomaten', 'c-konserven', 1, 'Dose'],
@@ -83,7 +83,7 @@ window.ZK_SEED_ITEMS = [
 
 // Stichwörter, mit denen neue Artikel automatisch einer Kategorie zugeordnet werden
 window.ZK_CAT_HINTS = {
-  'c-obst': 'apfel aepfel birne banane zitrone limette orange mandarine beere erdbeere himbeere heidelbeere traube kiwi mango ananas melone pfirsich pflaume tomate gurke paprika zucchini aubergine karotte moehre moehren kartoffel zwiebel knoblauch ingwer salat rucola spinat brokkoli blumenkohl kohl lauch porree sellerie fenchel pilz champignon avocado kraeuter petersilie basilikum schnittlauch koriander minze dill radieschen rote bete kuerbis spargel mais kolben suesskartoffel lauchzwiebel fruehlingszwiebel',
+  'c-obst': 'apfel aepfel birne banane zitrone limette orange mandarine beere erdbeere himbeere heidelbeere traube kiwi mango ananas melone pfirsich pflaume tomate gurke paprika zucchini aubergine karotte moehre moehren kartoffel zwiebel knoblauch ingwer salat rucola spinat brokkoli blumenkohl kohl lauch porree sellerie fenchel pilz champignon avocado kraeuter petersilie basilikum schnittlauch koriander minze dill radieschen rote bete kuerbis spargel mais kolben suesskartoffel lauchzwiebel fruehlingszwiebel chilischote peperoni',
   'c-brot': 'brot broetchen toast wrap baguette brezel croissant semmel tortilla fladenbrot knaeckebrot',
   'c-kuehl': 'milch butter ei eier joghurt quark sahne schmand creme fraiche frischkaese kaese gouda emmentaler parmesan mozzarella feta halloumi burrata ricotta skyr kefir buttermilch margarine gnocchi tortellini maultaschen blaetterteig pizzateig',
   'c-veggie': 'tofu tempeh seitan veggie vegan vegetarisch hack schnitzel nuggets soja falafel',

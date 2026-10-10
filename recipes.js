@@ -21,6 +21,7 @@ function parseIngredient(raw) {
   s = s.replace(/(\d+)\s*([½¼¾⅓⅔⅛])/g, (m, a, b) => String(+a + FRAC[b])).replace(/[½¼¾⅓⅔⅛]/g, (c) => String(FRAC[c]));
   s = s.replace(/(\d+)\s+(\d+)\/(\d+)/g, (m, a, b, c) => String(+a + b / c)).replace(/(\d+)\/(\d+)/g, (m, a, b) => String(a / b));
   s = s.replace(/(\d+(?:[.,]\d+)?)\s*(?:-|–|bis)\s*(\d+(?:[.,]\d+)?)/g, (m, a, b) => b); // Spanne → obere Grenze
+  s = s.replace(/\((?:n|e|s|en|er|nen|ns)\)/gi, '').replace(/\s+/g, ' ').trim(); // Chefkoch-Plural: Zwiebel(n)
   let note = '';
   const par = s.match(/\(([^)]*)\)/);
   if (par) { note = par[1].trim(); s = s.replace(par[0], ' ').replace(/\s+/g, ' ').trim(); }
@@ -57,7 +58,15 @@ function matchIngredient(name) {
   }
   if (best) return best;
   for (const w of n.split(' ')) { if (ING_ALIAS[w]) { const f = findItem(ING_ALIAS[w]); if (f) return f; } }
-  return null;
+  // Zusammengesetzte Wörter: „Cherrytomate“ → Tomaten, „Weizenmehl“ → Mehl, „Schlagsahne“ → Sahne
+  const last = stemWord(n.split(' ').pop() || '');
+  for (const it of items()) {
+    const nn = norm(it.name);
+    if (nn.includes(' ')) continue;
+    const st = stemWord(nn);
+    if (st.length >= 4 && last.length > st.length && last.endsWith(st) && nn.length > bestLen) { best = it; bestLen = nn.length; }
+  }
+  return best;
 }
 
 const MEAT = 'fleisch speck schinken wurst salami chorizo huhn haehnchen huehner pute truthahn rind schwein lamm kalb ente gans wild reh hirsch fisch lachs thunfisch forelle kabeljau garnele shrimp krabbe scampi sardelle anchovis sardine muschel tintenfisch gelatine aspik bacon pancetta prosciutto mortadella leberkaese hackfleisch'.split(' ');
@@ -221,7 +230,7 @@ function renderRecipeList(list) {
   let h = `<section class="group"><h2 class="ghead">Rezepte<small>${rs.length || ''}</small></h2>`;
   if (!rs.length) h += `<div class="empty"><p>Noch keine Rezepte. Leg euer erstes an: Zutaten einfach Zeile für Zeile eintippen oder hineinkopieren, die App ordnet sie dem Fundus zu.</p></div>`;
   else h += `<ul class="rows">${rs.map(recipeRow).join('')}</ul>`;
-  h += `</section><button class="create" type="button" data-act="newrecipe"><b>Neues Rezept anlegen</b><span>Titel, Portionen, Zutaten und Zubereitung.</span></button>`;
+  h += `</section><button class="create" type="button" data-act="importrecipe"><b>Rezept aus Link importieren</b><span>Chefkoch, gutekueche.at und viele andere Rezeptseiten.</span></button><button class="create" type="button" data-act="newrecipe"><b>Neues Rezept anlegen</b><span>Titel, Portionen, Zutaten und Zubereitung.</span></button>`;
   return h;
 }
 function renderRecipeSearch() {
@@ -291,12 +300,13 @@ function ingLine(i) {
 }
 function openRecipeEditor(id, preset = {}) {
   const r = id ? get('recipe', id) : null;
-  const d = r || { title: preset.title || '', servings: 2, ings: [], steps: [], url: '', tags: [], notes: '' };
+  const d = r || { title: preset.title || '', servings: preset.servings || 2, ings: [], steps: preset.steps || [], url: preset.url || '', tags: preset.tags || [], notes: '' };
   openSheet(`<h2>${r ? 'Rezept bearbeiten' : 'Neues Rezept'}</h2>
+    ${preset.banner ? `<p class="importnote">${esc(preset.banner)}</p>` : ''}
     <label class="field"><span>Titel</span><input id="fTitle" class="text" value="${esc(d.title)}" maxlength="80" autocomplete="off"></label>
     <div class="field"><span>Portionen</span>${stepper(d.servings)}</div>
     <label class="field"><span>Zutaten, eine pro Zeile</span>
-      <textarea id="fIngs" class="text area" rows="8" placeholder="500 g Spaghetti&#10;2 Zwiebeln&#10;3 EL Olivenöl&#10;1 Bio-Zitrone, Abrieb&#10;Salz und Pfeffer">${esc((d.ings || []).map(ingLine).join('\n'))}</textarea></label>
+      <textarea id="fIngs" class="text area" rows="8" placeholder="500 g Spaghetti&#10;2 Zwiebeln&#10;3 EL Olivenöl&#10;1 Bio-Zitrone, Abrieb&#10;Salz und Pfeffer">${esc(r ? (d.ings || []).map(ingLine).join('\n') : (preset.ingsText || ''))}</textarea></label>
     <div id="ingPrev" class="ingprev" aria-live="polite"></div>
     <label class="field"><span>Zubereitung, ein Schritt pro Zeile</span>
       <textarea id="fSteps" class="text area" rows="6">${esc((d.steps || []).join('\n'))}</textarea></label>
@@ -309,7 +319,8 @@ function openRecipeEditor(id, preset = {}) {
       ${r ? `<button class="btn danger" type="button" data-act="delrecipe" data-id="${esc(id)}">Rezept löschen</button>` : ''}
     </div>`, 'recipeedit');
   updateIngPreview();
-  if (!r && !d.title) { const t = $('#fTitle'); if (t) t.focus(); }
+  if (preset.focusIngs) { const t = $('#fIngs'); if (t) t.focus(); }
+  else if (!r && !d.title) { const t = $('#fTitle'); if (t) t.focus(); }
 }
 function parsedIngs() {
   const el = $('#fIngs');
