@@ -332,3 +332,29 @@ main { padding: 0 16px; outline: 0; }
 .ingprev li .amt { width: 86px; flex: none; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 .shop .main.static { cursor: default; }
 .daychips .chip { height: 44px; padding: 0 14px; }
+
+/* ── Spracherfassung ── */
+.micbtn { color: var(--ink); }
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 2px solid var(--ink); border-radius: 12px; overflow: hidden; margin-top: 8px; }
+.seg button { height: 44px; border: 0; background: transparent; font-weight: 600; font-size: 16px; color: var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.vsub { margin-top: 8px; }
+.vbox { position: relative; }
+.vbox .text.area { padding-bottom: 64px; }
+.micbig {
+  position: absolute; right: 10px; bottom: 10px; height: 46px; padding: 0 16px 0 12px; border-radius: 23px; border: 0;
+  background: var(--lemon); color: #3a3000; font-weight: 700; font-size: 16px; display: inline-flex; align-items: center; gap: 8px;
+}
+.micbig.on { background: var(--danger); color: #fff; animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 8px color-mix(in srgb, var(--danger) 25%, transparent); } }
+.vgroup { margin-top: 14px; }
+.vgroup .ghead { font-size: 17px; margin: 0; }
+.vrow { gap: 6px; padding: 6px 0; }
+.vrow .stack { flex: 1; min-width: 0; }
+.vamt { width: 92px; flex: none; height: 40px; padding: 0 8px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--bg); color: var(--ink); font-size: 15px; text-align: right; }
+.vamt::placeholder { color: var(--muted); font-size: 12.5px; }
+.vamt:focus { outline: 0; border-color: var(--ink); }
+.vamt.bad { border-color: var(--danger); }
+.vmove { flex: none; height: 40px; padding: 0 9px; border-radius: 10px; border: 1.5px solid var(--line); background: transparent; font-size: 13px; font-weight: 600; color: var(--ink); }
+.vx { flex: none; width: 36px; height: 40px; border: 0; background: transparent; color: var(--muted); font-size: 22px; }
+@media (max-width: 370px) { .vamt { width: 74px; } .vmove { padding: 0 6px; } }

@@ -1,7 +1,7 @@
 // Offline-Speicher: Die App lädt auch ohne Netz (z. B. im Keller vom Supermarkt).
 // Eigene Dateien: zuerst aus dem Netz (damit Updates sofort ankommen), sonst aus dem Speicher.
-const CACHE = 'zitronenkorb-v3';
-const CORE = ['./', './index.html', './app.css', './app.js', './recipes.js', './seed.js', './config.js', './icon-180.png'];
+const CACHE = 'zitronenkorb-v4';
+const CORE = ['./', './index.html', './app.css', './app.js', './recipes.js', './voice.js', './seed.js', './config.js', './icon-180.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE)).catch(() => {}));
