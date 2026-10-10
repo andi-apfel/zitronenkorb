@@ -4,7 +4,7 @@
 
 const CFG = window.ZK_CONFIG || {};
 const UNITS = window.ZK_UNITS;
-const VERSION = '1.0';
+const VERSION = '1.1';
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const rid = (n = 12) => { const a = 'abcdefghijkmnopqrstuvwxyz23456789'; const b = crypto.getRandomValues(new Uint8Array(n)); return Array.from(b, (x) => a[x % a.length]).join(''); };
@@ -155,24 +155,70 @@ function convert(q, from, to) {
   const f = { g: ['kg', 1 / 1000], kg: ['g', 1000], ml: ['l', 1 / 1000], l: ['ml', 1000] }[from];
   return f && f[0] === to ? q * f[1] : null;
 }
-// Ohne Menge: Standardmenge des Artikels. Steht er schon drauf, wird eine angegebene Menge dazugezählt.
-function addToList(itemId, qty, unit) {
+const round3 = (q) => Math.round(q * 1000) / 1000;
+// Menge zu einem vorhandenen Stand addieren (mit Umrechnung g/kg, ml/l). Passen die Einheiten nicht, gilt die neue Angabe.
+function sumInto(cur, q, u) {
+  if (!cur || !(cur.qty > 0)) return { qty: round3(q), unit: u };
+  const c = convert(q, u, cur.unit);
+  return c != null ? { qty: round3(cur.qty + c), unit: cur.unit } : { qty: round3(q), unit: u };
+}
+const listOpen = (id) => { const e = get('list', id); return e && !e.checked ? e : null; };
+
+// Auf die Liste: Steht der Artikel schon drauf, wird die Menge dazugezählt.
+function addToList(itemId, qty, unit, opts = {}) {
   const item = get('item', itemId);
-  if (!item) return;
-  const cur = get('list', itemId);
-  const open = cur && !cur.checked;
-  if (open && !(qty > 0)) { toast(item.name + ' steht schon auf der Liste (' + fmtAmt(cur.qty, cur.unit) + ')'); return; }
-  let q = qty > 0 ? qty : item.qty, u = qty > 0 ? (unit || item.unit) : item.unit;
-  if (open) {
-    const c = convert(q, u, cur.unit);
-    if (c != null) { q = Math.round((cur.qty + c) * 1000) / 1000; u = cur.unit; }
-  }
+  if (!item || !(qty > 0)) return;
+  const open = listOpen(itemId);
+  const next = sumInto(open, qty, unit || item.unit);
   const undo = tx(() => {
-    put('list', { id: itemId, qty: q, unit: u, checked: false, at: Date.now() });
+    put('list', { id: itemId, qty: next.qty, unit: next.unit, checked: false, at: Date.now() });
     if (!open) put('item', Object.assign({}, item, { uses: (item.uses || 0) + 1, last: Date.now() }));
   });
-  toast(open ? item.name + ': jetzt ' + fmtAmt(q, u) + ' auf der Liste' : item.name + ' (' + fmtAmt(q, u) + ') steht auf der Liste', undo);
+  if (!opts.silent) toast(open ? item.name + ': jetzt ' + fmtAmt(next.qty, next.unit) + ' auf der Liste' : item.name + ' (' + fmtAmt(next.qty, next.unit) + ') steht auf der Liste', undo);
 }
+
+// Ins Zitronenlager: zum vorhandenen Bestand dazuzählen.
+function addToStock(itemId, qty, unit) {
+  const item = get('item', itemId);
+  if (!item || !(qty > 0)) return;
+  const cur = get('stock', itemId);
+  const next = sumInto(cur, qty, unit || item.unit);
+  const undo = tx(() => put('stock', Object.assign({ min: null }, cur || {}, { id: itemId, qty: next.qty, unit: next.unit, at: Date.now() })));
+  toast(item.name + ': ' + fmtAmt(next.qty, next.unit) + ' im Zitronenlager', undo);
+}
+
+// Bestand ändern. Fällt er auf die Mindestmenge oder darunter, kommt der Artikel automatisch auf die Liste.
+function setStock(itemId, qty, unit, min) {
+  const item = get('item', itemId), cur = get('stock', itemId);
+  if (!item) return;
+  const s = Object.assign({ min: null }, cur || {}, { id: itemId, qty: Math.max(0, round3(qty)), unit: unit || (cur && cur.unit) || item.unit, at: Date.now() });
+  if (min !== undefined) s.min = min > 0 ? round3(min) : null;
+  const wasLow = cur ? isLow(cur) : false;
+  let auto = false;
+  const undo = tx(() => {
+    put('stock', s);
+    if (isLow(s) && !wasLow && !listOpen(itemId)) {
+      auto = true;
+      put('list', { id: itemId, qty: item.qty, unit: item.unit, checked: false, at: Date.now(), auto: true });
+    }
+  });
+  if (auto) toast(item.name + ' wird knapp und steht jetzt auf der Liste', undo);
+}
+const isLow = (s) => !!(s && s.min > 0 && s.qty <= s.min);
+function stepStock(itemId, dir) {
+  const s = get('stock', itemId);
+  if (!s) return;
+  const st = stepFor(s.unit, dir < 0 ? Math.max(0, s.qty - 0.0001) : s.qty);
+  let q = dir < 0 ? s.qty - st : s.qty + st;
+  q = q < st / 2 ? 0 : Math.round(q / st) * st;
+  setStock(itemId, q);
+}
+function removeFromStock(id) {
+  const item = get('item', id);
+  const undo = tx(() => del('stock', id));
+  toast((item ? item.name : 'Artikel') + ' ist aus dem Lager entfernt', undo);
+}
+
 function toggleCheck(id) {
   const e = get('list', id);
   if (!e) return;
@@ -183,14 +229,20 @@ function removeFromList(id) {
   const undo = tx(() => del('list', id));
   toast((item ? item.name : 'Eintrag') + ' ist von der Liste', undo);
 }
+// Einkauf abschließen: Abgehaktes wandert ins Zitronenlager.
 function finishTrip() {
   const done = entries().filter((e) => e.checked);
   if (!done.length) return;
   const undo = tx(() => {
     put('trip', { id: 't-' + rid(10), at: Date.now(), items: done.map((e) => ({ item: e.id, qty: e.qty, unit: e.unit })) });
-    done.forEach((e) => del('list', e.id));
+    done.forEach((e) => {
+      const cur = get('stock', e.id);
+      const next = sumInto(cur, e.qty, e.unit);
+      put('stock', Object.assign({ min: null }, cur || {}, { id: e.id, qty: next.qty, unit: next.unit, at: Date.now() }));
+      del('list', e.id);
+    });
   });
-  toast('Ausgepresst! ' + done.length + (done.length === 1 ? ' Sache' : ' Sachen') + ' erledigt.', undo);
+  toast('Ausgepresst! ' + done.length + (done.length === 1 ? ' Sache ist' : ' Sachen sind') + ' jetzt im Zitronenlager.', undo);
 }
 
 // ── Abgleich ──
@@ -328,19 +380,23 @@ const SLICE = '<svg class="slice" viewBox="0 0 28 28" aria-hidden="true"><circle
 const PENCIL = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z"/></svg>';
 const PLUS = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>';
 
+const TAB_PH = { liste: 'Was fehlt? z. B. 2 l Milch', lager: 'Im Lager suchen oder ergänzen', fundus: 'Im Fundus suchen' };
+const VIEWS = { liste: () => renderList(), lager: () => renderLager(), fundus: () => renderFundus() };
 function render() {
+  if (!VIEWS[UI.tab]) UI.tab = 'liste';
   document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-current', b.dataset.tab === UI.tab ? 'page' : 'false'));
   const open = entries().filter((e) => !e.checked).length;
   $('#badge').textContent = open ? String(open) : '';
-  $('#q').placeholder = UI.tab === 'liste' ? 'Was fehlt? z. B. 2 l Milch' : 'Im Fundus suchen';
+  $('#q').placeholder = TAB_PH[UI.tab];
   $('#qClear').hidden = !UI.q;
-  const main = $('#main');
-  if (UI.q.trim()) main.innerHTML = renderSearch();
-  else main.innerHTML = UI.tab === 'liste' ? renderList() : renderFundus();
+  $('#main').innerHTML = UI.q.trim() ? renderSearch() : VIEWS[UI.tab]();
   renderJump();
   renderStatus();
   if (UI.view === 'settings' && !$('#sheet').hidden) renderSettings();
 }
+
+const byName = (a, b) => a.name.localeCompare(b.name, 'de', { sensitivity: 'base' });
+function letterOf(name) { const c = fold(name).trim().charAt(0).toUpperCase(); return /[A-Z]/.test(c) ? c : '#'; }
 
 function groupByCat(rows, itemOf) {
   const byCat = {};
@@ -351,7 +407,7 @@ function groupByCat(rows, itemOf) {
 function listRow(e, item) {
   return `<li class="row${e.checked ? ' done' : ''}">
     <button class="check" type="button" data-act="check" data-id="${esc(e.id)}" aria-label="${esc(item.name)} ${e.checked ? 'wieder offen' : 'abhaken'}" aria-pressed="${e.checked}">${SLICE}</button>
-    <button class="main" type="button" data-act="amount" data-id="${esc(e.id)}"><span class="name">${esc(item.name)}</span><span class="amt">${fmtAmt(e.qty, e.unit)}</span></button>
+    <button class="main" type="button" data-act="amount" data-id="${esc(e.id)}"><span class="name">${esc(item.name)}${e.auto ? ' <span class="tag low">knapp</span>' : ''}</span><span class="amt">${fmtAmt(e.qty, e.unit)}</span></button>
   </li>`;
 }
 
@@ -360,48 +416,80 @@ function renderList() {
   const open = all.filter((e) => !e.checked), done = all.filter((e) => e.checked);
   let h = '';
   if (!all.length) {
-    h += `<div class="empty"><p class="big">Die Liste ist leer.</p><p>Schreib oben, was fehlt, oder such dir im Fundus etwas aus.</p></div>`;
+    h += `<div class="empty"><p class="big">Die Liste ist leer.</p><p>Schreib oben, was fehlt, oder tippe im Fundus auf einen Artikel.</p></div>`;
   } else if (!open.length) {
-    h += `<div class="empty"><p class="big">Alles im Korb.</p><p>Wenn ihr fertig seid, schließt den Einkauf unten ab.</p></div>`;
+    h += `<div class="empty"><p class="big">Alles im Korb.</p><p>Wenn ihr fertig seid, schließt den Einkauf unten ab. Dann wandert alles ins Zitronenlager.</p></div>`;
   }
   h += renderOften();
   groupByCat(open, (e) => get('item', e.id)).forEach(({ cat, rows }) => {
-    rows.sort((a, b) => get('item', a.id).name.localeCompare(get('item', b.id).name, 'de'));
+    rows.sort((a, b) => byName(get('item', a.id), get('item', b.id)));
     h += `<section class="group"><h2 class="ghead">${esc(cat.name)}<small>${rows.length}</small></h2><ul class="rows">${rows.map((e) => listRow(e, get('item', e.id))).join('')}</ul></section>`;
   });
   if (done.length) {
     done.sort((a, b) => (b.checkedAt || 0) - (a.checkedAt || 0));
     h += `<section class="group basket"><h2 class="ghead">Im Korb<small>${done.length}</small></h2><ul class="rows">${done.map((e) => listRow(e, get('item', e.id))).join('')}</ul>
-      <button class="finish" type="button" data-act="finish">Einkauf abschließen</button></section>`;
+      <button class="finish" type="button" data-act="finish">Einkauf abschließen</button>
+      <p class="hint">Alles im Korb wandert dann ins Zitronenlager.</p></section>`;
   }
   return h;
 }
 
 function renderOften() {
-  const onList = new Set(entries().map((e) => e.id));
+  const onList = new Set(entries().filter((e) => !e.checked).map((e) => e.id));
   const often = items().filter((i) => (i.uses || 0) > 0 && !onList.has(i.id))
     .sort((a, b) => (b.uses || 0) - (a.uses || 0) || (b.last || 0) - (a.last || 0)).slice(0, 10);
   if (!often.length) return '';
   return `<section class="often"><h2>Oft gekauft</h2><div class="chips">${often.map((i) =>
-    `<button class="chip" type="button" data-act="add" data-id="${esc(i.id)}">${PLUS}${esc(i.name)}</button>`).join('')}</div></section>`;
+    `<button class="chip" type="button" data-act="ask" data-id="${esc(i.id)}">${PLUS}${esc(i.name)}</button>`).join('')}</div></section>`;
 }
 
+function itemTags(item) {
+  const s = get('stock', item.id), e = listOpen(item.id);
+  let t = '';
+  if (s && s.qty > 0) t += `<span class="tag stock">${fmtAmt(s.qty, s.unit)} im Lager</span>`;
+  if (e) t += `<span class="tag list">${fmtAmt(e.qty, e.unit)} auf der Liste</span>`;
+  return t ? `<span class="tags">${t}</span>` : '';
+}
 function fundusRow(item) {
-  const e = get('list', item.id), on = e && !e.checked;
   return `<li class="row">
-    <button class="main" type="button" data-act="${on ? 'amount' : 'add'}" data-id="${esc(item.id)}"><span class="name">${esc(item.name)}</span>
-      <span class="add${on ? ' on' : ''}">${on ? fmtAmt(e.qty, e.unit) : PLUS + '<span>' + fmtAmt(item.qty, item.unit) + '</span>'}</span></button>
+    <button class="main" type="button" data-act="ask" data-id="${esc(item.id)}"><span class="stack"><span class="name">${esc(item.name)}</span>${itemTags(item)}</span></button>
     <button class="edit" type="button" data-act="edititem" data-id="${esc(item.id)}" aria-label="${esc(item.name)} bearbeiten">${PENCIL}</button>
   </li>`;
 }
 
 function renderFundus() {
-  let h = '';
-  groupByCat(items(), (i) => i).forEach(({ cat, rows }) => {
-    rows.sort((a, b) => (b.uses || 0) - (a.uses || 0) || a.name.localeCompare(b.name, 'de'));
-    h += `<section class="group" id="g-${esc(cat.id)}"><h2 class="ghead">${esc(cat.name)}<small>${rows.length}</small></h2><ul class="rows">${rows.map(fundusRow).join('')}</ul></section>`;
+  const groups = {};
+  items().sort(byName).forEach((i) => { const l = letterOf(i.name); (groups[l] = groups[l] || []).push(i); });
+  let h = '<p class="hint lead">Tippe auf einen Artikel und gib an, wie viel ins Lager oder auf die Liste soll.</p>';
+  Object.keys(groups).sort().forEach((l) => {
+    h += `<section class="group" id="L-${l}"><h2 class="ghead letter">${l}</h2><ul class="rows">${groups[l].map(fundusRow).join('')}</ul></section>`;
   });
-  h += `<button class="create" type="button" data-act="newitem"><b>Neuen Artikel anlegen</b><span>Er landet im Fundus und kann jederzeit auf die Liste.</span></button>`;
+  h += `<button class="create" type="button" data-act="newitem"><b>Neuen Artikel anlegen</b><span>Er kommt in den Fundus und kann dann ins Lager oder auf die Liste.</span></button>`;
+  return h;
+}
+
+function stockRow(s, item) {
+  const low = isLow(s);
+  return `<li class="row stockrow${s.qty > 0 ? '' : ' gone'}">
+    <button class="main" type="button" data-act="stockedit" data-id="${esc(s.id)}"><span class="name">${esc(item.name)}${low ? ' <span class="tag low">knapp</span>' : ''}</span></button>
+    <div class="qtyctl">
+      <button class="pm" type="button" data-act="stockminus" data-id="${esc(s.id)}" aria-label="${esc(item.name)} weniger" ${s.qty > 0 ? '' : 'disabled'}>−</button>
+      <span class="amt">${fmtAmt(s.qty, s.unit)}</span>
+      <button class="pm" type="button" data-act="stockplus" data-id="${esc(s.id)}" aria-label="${esc(item.name)} mehr">+</button>
+    </div>
+  </li>`;
+}
+function renderLager() {
+  const st = all('stock').filter((s) => get('item', s.id));
+  if (!st.length) {
+    return `<div class="empty"><p class="big">Das Zitronenlager ist leer.</p><p>Tippe im Fundus auf einen Artikel und wähle „Ins Lager“. Nach jedem Einkauf landet das Eingekaufte automatisch hier.</p></div>`;
+  }
+  const name = (s) => get('item', s.id);
+  const have = st.filter((s) => s.qty > 0).sort((a, b) => byName(name(a), name(b)));
+  const gone = st.filter((s) => !(s.qty > 0)).sort((a, b) => byName(name(a), name(b)));
+  let h = '';
+  if (have.length) h += `<section class="group"><h2 class="ghead">Vorhanden<small>${have.length}</small></h2><ul class="rows">${have.map((s) => stockRow(s, name(s))).join('')}</ul></section>`;
+  if (gone.length) h += `<section class="group gonegroup"><h2 class="ghead">Aufgebraucht<small>${gone.length}</small></h2><ul class="rows">${gone.map((s) => stockRow(s, name(s))).join('')}</ul></section>`;
   return h;
 }
 
@@ -409,15 +497,15 @@ function renderSearch() {
   const p = parseEntry(UI.q);
   const hits = search(p.name || UI.q);
   const exact = findItem(p.name);
+  const target = UI.tab === 'lager' ? 'ins Lager' : 'auf die Liste';
   let h = '';
+  if (UI.tab !== 'fundus' && exact) {
+    h += `<p class="hint lead">${p.qty ? 'Mit „Fertig“ auf der Tastatur kommen ' + esc(fmtAmt(p.qty, p.unit || exact.unit)) + ' ' + esc(exact.name) + ' direkt ' + target + '.' : 'Mit „Fertig“ fragt die App, wie viel ' + esc(exact.name) + ' ' + target + ' soll.'}</p>`;
+  }
   if (hits.length) h += `<section class="group"><h2 class="ghead">Im Fundus<small>${hits.length}</small></h2><ul class="rows">${hits.map(fundusRow).join('')}</ul></section>`;
   if (p.name && !exact) {
     const amt = p.qty ? fmtAmt(p.qty, p.unit || 'Stk') : null;
-    h += `<button class="create" type="button" data-act="createfromq"><b>„${esc(p.name)}“ neu anlegen</b><span>Vorschlag: ${esc(catName(guessCat(p.name)))}${amt ? ', ' + esc(amt) : ''}. Kommt in den Fundus${UI.tab === 'liste' ? ' und auf die Liste' : ''}.</span></button>`;
-  }
-  if (UI.tab === 'liste' && exact) {
-    const cur = get('list', exact.id);
-    h += `<p class="hint">${cur && !cur.checked && !p.qty ? esc(exact.name) + ' steht schon auf der Liste.' : 'Mit „Fertig“ auf der Tastatur kommt ' + esc(exact.name) + (p.qty ? ' (' + esc(fmtAmt(p.qty, p.unit || exact.unit)) + ')' : '') + ' direkt auf die Liste.'}</p>`;
+    h += `<button class="create" type="button" data-act="createfromq"><b>„${esc(p.name)}“ neu anlegen</b><span>Vorschlag: ${esc(catName(guessCat(p.name)))}${amt ? ', ' + esc(amt) : ''}. Kommt in den Fundus, danach fragt die App, wohin.</span></button>`;
   }
   return h;
 }
@@ -427,8 +515,8 @@ function renderJump() {
   const show = UI.tab === 'fundus' && !UI.q.trim();
   j.hidden = !show;
   if (!show) return;
-  const used = new Set(items().map(catOf));
-  j.innerHTML = cats().filter((c) => used.has(c.id)).map((c) => `<button type="button" data-act="jump" data-id="${esc(c.id)}">${esc(c.name)}</button>`).join('');
+  const letters = [...new Set(items().map((i) => letterOf(i.name)))].sort();
+  j.innerHTML = letters.map((l) => `<button type="button" data-act="jump" data-id="${l}" aria-label="Zu ${l} springen">${l}</button>`).join('');
 }
 
 function syncState() {
@@ -473,9 +561,9 @@ function unitChips(sel, name = 'unit') {
 function catChips(sel) {
   return `<div class="chips" role="radiogroup">${cats().map((c) => `<button class="chip" type="button" role="radio" data-act="pick" data-group="cat" data-v="${esc(c.id)}" aria-pressed="${c.id === sel}" aria-checked="${c.id === sel}">${esc(c.name)}</button>`).join('')}</div>`;
 }
-function stepper(qty) {
+function stepper(qty, allowZero) {
   return `<div class="stepper"><button type="button" data-act="step" data-d="-1" aria-label="weniger">−</button>
-    <input id="fQty" inputmode="decimal" value="${esc(fmtQty(qty))}" aria-label="Menge"><button type="button" data-act="step" data-d="1" aria-label="mehr">+</button></div>`;
+    <input id="fQty" inputmode="decimal" value="${esc(qty == null ? '' : fmtQty(qty))}" aria-label="Menge" autocomplete="off" data-zero="${allowZero ? 1 : 0}"><button type="button" data-act="step" data-d="1" aria-label="mehr">+</button></div>`;
 }
 const picked = (group) => { const b = document.querySelector(`#sheet [data-group="${group}"][aria-pressed="true"]`); return b ? b.dataset.v : null; };
 
@@ -494,21 +582,60 @@ function openAmount(id) {
     </div>`, 'amount');
 }
 
+// „Wie viel?“ – aus Fundus, Suche oder „Oft gekauft“: Menge eingeben, dann ins Lager oder auf die Liste
+function openAsk(id, preset = {}) {
+  const item = get('item', id);
+  if (!item) return;
+  const s = get('stock', id), e = listOpen(id);
+  const ctx = preset.forceList ? 'liste' : UI.tab;
+  const unit = preset.unit || (ctx === 'lager' && s ? s.unit : e ? e.unit : item.unit);
+  const status = [s && s.qty > 0 ? 'Im Lager: ' + fmtAmt(s.qty, s.unit) + '.' : 'Nicht im Lager.', e ? 'Auf der Liste: ' + fmtAmt(e.qty, e.unit) + '.' : ''].join(' ');
+  const toList = `<button class="btn ${ctx === 'lager' ? '' : 'primary'}" type="button" data-act="asklist" data-id="${esc(id)}">Auf die Liste</button>`;
+  const toStock = `<button class="btn ${ctx === 'lager' ? 'primary' : ''}" type="button" data-act="askstock" data-id="${esc(id)}">Ins Lager</button>`;
+  openSheet(`<h2>${esc(item.name)}</h2><p class="sub">${esc(status)}</p>
+    <div class="field"><span>Wie viel?</span>${stepper(preset.qty > 0 ? preset.qty : null)}</div>
+    <div class="field"><span>Einheit</span>${unitChips(unit)}</div>
+    <p class="err" id="fErr" hidden></p>
+    <div class="actions two">${ctx === 'lager' ? toStock + toList : toList + toStock}</div>
+    <div class="actions"><button class="btn quiet" type="button" data-act="edititem" data-id="${esc(id)}">Artikel bearbeiten</button></div>`, 'ask');
+  const inp = $('#fQty'); if (inp) inp.focus();
+}
+
+// Lager-Eintrag: Bestand genau setzen, Mindestmenge, entfernen
+function openStock(id) {
+  const item = get('item', id), s = get('stock', id);
+  if (!item || !s) return;
+  openSheet(`<h2>${esc(item.name)}</h2><p class="sub">Im Zitronenlager</p>
+    <div class="field"><span>Bestand</span>${stepper(s.qty, true)}</div>
+    <div class="field"><span>Einheit</span>${unitChips(s.unit)}</div>
+    <label class="field"><span>Nachkaufen ab</span>
+      <input id="fMin" class="text short" inputmode="decimal" value="${esc(s.min > 0 ? fmtQty(s.min) : '')}" placeholder="aus" autocomplete="off"></label>
+    <p class="hint">Fällt der Bestand auf diese Menge oder darunter, kommt ${esc(item.name)} automatisch auf die Liste (${esc(fmtAmt(item.qty, item.unit))}). Leer lassen, wenn nicht gewünscht.</p>
+    <p class="err" id="fErr" hidden></p>
+    <div class="actions">
+      <button class="btn primary" type="button" data-act="savestock" data-id="${esc(id)}">Speichern</button>
+      <button class="btn" type="button" data-act="asktolist" data-id="${esc(id)}">Auf die Liste setzen</button>
+      <button class="btn danger" type="button" data-act="unstock" data-id="${esc(id)}">Aus dem Lager entfernen</button>
+      <button class="btn quiet" type="button" data-act="edititem" data-id="${esc(id)}">Artikel bearbeiten</button>
+    </div>`, 'stock');
+}
+
 function openItemEditor(id, preset) {
   const item = id ? get('item', id) : null;
   const d = item || Object.assign({ name: '', cat: 'c-sonst', qty: 1, unit: 'Stk' }, preset || {});
-  const toList = !item && preset && preset.toList;
+  const ask = (!item && preset) || {};
   openSheet(`<h2>${item ? 'Artikel bearbeiten' : 'Neuer Artikel'}</h2>
     <label class="field"><span>Name</span><input id="fName" class="text" value="${esc(d.name)}" autocomplete="off" maxlength="60"></label>
-    <div class="field"><span>Kategorie</span>${catChips(d.cat)}</div>
-    <div class="field"><span>Übliche Menge</span>${stepper(d.qty)}</div>
+    <div class="field"><span>Kategorie (bestimmt den Platz auf der Einkaufsliste)</span>${catChips(d.cat)}</div>
+    <div class="field"><span>Übliche Einkaufsmenge</span>${stepper(d.qty)}</div>
     <div class="field"><span>Einheit</span>${unitChips(d.unit)}</div>
+    <p class="hint">Die übliche Menge kommt auf die Liste, wenn der Artikel im Lager knapp wird.</p>
     <p class="err" id="fErr" hidden></p>
     <div class="actions">
-      <button class="btn primary" type="button" data-act="saveitem" data-id="${esc(id || '')}" data-tolist="${toList ? 1 : 0}">${item ? 'Speichern' : toList ? 'Anlegen und auf die Liste' : 'Anlegen'}</button>
+      <button class="btn primary" type="button" data-act="saveitem" data-id="${esc(id || '')}" data-askq="${esc(ask.askQty || '')}" data-asku="${esc(ask.askUnit || '')}">${item ? 'Speichern' : 'Anlegen'}</button>
       ${item ? `<button class="btn danger" type="button" data-act="delitem" data-id="${esc(id)}">Aus dem Fundus löschen</button>` : ''}
     </div>`, 'item');
-  if (!item && !d.name) setTimeout(() => $('#fName') && $('#fName').focus(), 50);
+  if (!item && !d.name) { const n = $('#fName'); if (n) n.focus(); }
 }
 
 function readQty() {
@@ -648,8 +775,10 @@ function quickAdd() {
   if (!p.name) return;
   const exact = findItem(p.name);
   if (exact) {
-    if (UI.tab === 'liste') { addToList(exact.id, p.qty, p.qty ? (p.unit || exact.unit) : null); clearQuery(true); }
-    else openItemEditor(exact.id);
+    const u = p.unit || exact.unit;
+    if (p.qty && UI.tab === 'liste') { addToList(exact.id, p.qty, u); clearQuery(true); }
+    else if (p.qty && UI.tab === 'lager') { addToStock(exact.id, p.qty, u); clearQuery(true); }
+    else openAsk(exact.id, p.qty ? { qty: p.qty, unit: u } : {});
     return;
   }
   createFromQuery();
@@ -658,11 +787,21 @@ function createFromQuery() {
   const p = parseEntry(UI.q);
   if (!p.name) return;
   const name = p.name.charAt(0).toUpperCase() + p.name.slice(1);
-  openItemEditor(null, { name, cat: guessCat(name), qty: p.qty || 1, unit: p.unit || 'Stk', toList: UI.tab === 'liste' });
+  openItemEditor(null, { name, cat: guessCat(name), qty: p.qty || 1, unit: p.unit || 'Stk', askQty: p.qty || null, askUnit: p.qty ? (p.unit || 'Stk') : null });
 }
 function clearQuery(keepFocus) {
   UI.q = ''; $('#q').value = ''; render();
   if (keepFocus) $('#q').focus(); else $('#q').blur();
+}
+
+function askDone(b, where) {
+  const q = readQty(), u = picked('unit');
+  if (!(q > 0)) { showErr('Bitte eingeben, wie viel. Die Menge muss größer als null sein.'); const i = $('#fQty'); if (i) i.focus(); return; }
+  if (!u) return showErr('Bitte eine Einheit wählen.');
+  const fromSearch = !!UI.q;
+  closeSheet();
+  if (where === 'liste') addToList(b.dataset.id, q, u); else addToStock(b.dataset.id, q, u);
+  if (fromSearch) clearQuery(true);
 }
 
 const actions = {
@@ -672,34 +811,41 @@ const actions = {
     setTimeout(() => toggleCheck(b.dataset.id), matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 260);
   },
   amount: (b) => openAmount(b.dataset.id),
-  add: (b) => {
-    const it = get('item', b.dataset.id);
-    if (!it) return;
-    addToList(it.id);
-    if (UI.q) clearQuery(true);
+  ask: (b) => openAsk(b.dataset.id),
+  asklist: (b) => askDone(b, 'liste'),
+  askstock: (b) => askDone(b, 'lager'),
+  asktolist: (b) => openAsk(b.dataset.id, { forceList: true }),
+  stockplus: (b) => stepStock(b.dataset.id, 1),
+  stockminus: (b) => stepStock(b.dataset.id, -1),
+  stockedit: (b) => openStock(b.dataset.id),
+  savestock: (b) => {
+    const raw = $('#fQty').value.trim();
+    const q = raw === '' ? 0 : parseNum(raw), u = picked('unit');
+    const mraw = $('#fMin').value.trim(), m = mraw === '' ? null : parseNum(mraw);
+    if (!(q >= 0)) return showErr('Bitte einen Bestand von null oder mehr eingeben.');
+    if (m !== null && !(m >= 0)) return showErr('„Nachkaufen ab“ bitte als Zahl eingeben oder leer lassen.');
+    if (!u) return showErr('Bitte eine Einheit wählen.');
+    closeSheet();
+    setStock(b.dataset.id, q, u, m);
   },
+  unstock: (b) => { closeSheet(); removeFromStock(b.dataset.id); },
   edititem: (b) => openItemEditor(b.dataset.id),
   newitem: () => openItemEditor(null, { cat: 'c-sonst' }),
   createfromq: () => createFromQuery(),
   finish: () => finishTrip(),
-  jump: (b) => { const g = document.getElementById('g-' + b.dataset.id); if (g) g.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }); },
+  jump: (b) => { const g = document.getElementById('L-' + b.dataset.id); if (g) g.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }); },
   close: () => closeSheet(),
   undo: () => { const u = toastUndo; $('#toast').hidden = true; toastUndo = null; if (u) u(); },
   pick: (b) => {
-    if (b.dataset.group === 'unit') {
-      // beim Wechsel zwischen g/kg bzw. ml/l die Menge umrechnen, sonst sinnvoll vorbelegen
-      const from = picked('unit'), q = readQty();
-      const c = q > 0 && from ? convert(q, from, b.dataset.v) : null;
-      if (c != null) $('#fQty').value = fmtQty(Math.round(c * 1000) / 1000);
-      else if (!(q > 0)) $('#fQty').value = fmtQty(['g', 'ml'].includes(b.dataset.v) ? 100 : 1);
-    }
     document.querySelectorAll(`#sheet [data-group="${b.dataset.group}"]`).forEach((x) => { x.setAttribute('aria-pressed', String(x === b)); x.setAttribute('aria-checked', String(x === b)); });
   },
   step: (b) => {
     const u = picked('unit') || 'Stk';
-    let q = readQty(); if (!(q > 0)) q = 0;
-    const st = stepFor(u, q);
-    q = Math.max(st, Math.round((q + st * Number(b.dataset.d)) / st) * st);
+    const inp = $('#fQty'), zero = inp.dataset.zero === '1', d = Number(b.dataset.d);
+    let q = parseNum(inp.value); if (!(q > 0)) q = 0;
+    const st = stepFor(u, d < 0 ? Math.max(0, q - 0.0001) : q);
+    q = Math.round((q + st * d) / st) * st;
+    q = Math.max(zero ? 0 : st, q);
     $('#fQty').value = fmtQty(Math.round(q * 1000) / 1000);
   },
   saveamount: (b) => {
@@ -728,15 +874,10 @@ const actions = {
       toast(name + ' gespeichert');
     } else {
       const nid = 'u-' + rid(10);
-      if (b.dataset.tolist === '1') {
-        tx(() => put('item', { id: nid, name, cat, qty: q, unit: u, uses: 0, created: Date.now() }));
-        addToList(nid, q, u);
-        clearQuery(false);
-      } else {
-        const undo = tx(() => put('item', { id: nid, name, cat, qty: q, unit: u, uses: 0, created: Date.now() }));
-        toast(name + ' ist im Fundus', undo);
-        if (UI.q) clearQuery(false);
-      }
+      tx(() => put('item', { id: nid, name, cat, qty: q, unit: u, uses: 0, created: Date.now() }));
+      if (UI.q) { UI.q = ''; $('#q').value = ''; render(); }
+      // gleich weiter: wie viel und wohin?
+      openAsk(nid, { qty: parseNum(b.dataset.askq) || null, unit: b.dataset.asku || u });
     }
   },
   delitem: (b) => {

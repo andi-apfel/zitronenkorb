@@ -249,3 +249,41 @@ main { padding: 0 16px; outline: 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ── Zitronenlager und Fundus ── */
+.tabs { gap: 2px; padding-left: 8px; padding-right: 8px; }
+.tabs button { font-size: 15px; padding: 0 6px; gap: 6px; letter-spacing: -0.01em; }
+.row .stack { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+.tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.tag { display: inline-block; font-size: 12.5px; line-height: 1; padding: 4px 7px; border-radius: 6px; font-weight: 600; white-space: nowrap; vertical-align: 2px; }
+.tag.stock { background: color-mix(in srgb, var(--leaf) 16%, transparent); color: var(--leaf); }
+.tag.list { background: var(--lemon-soft); color: var(--lemon-ink); }
+.tag.low { background: var(--lemon); color: #3a3000; }
+.hint.lead { margin: 6px 2px 0; }
+
+.stockrow .main { min-height: 54px; }
+.qtyctl { flex: none; display: flex; align-items: center; gap: 2px; }
+.qtyctl .amt { min-width: 64px; text-align: center; color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; font-size: 16px; }
+.pm {
+  width: 40px; height: 40px; border-radius: 20px; border: 1.5px solid var(--line); background: var(--surface);
+  font-size: 22px; line-height: 1; color: var(--ink); display: grid; place-items: center; padding: 0 0 2px;
+}
+.pm:disabled { opacity: .3; }
+.stockrow.gone .name, .stockrow.gone .amt { color: var(--muted); }
+.gonegroup .ghead { border-bottom-color: var(--line); color: var(--muted); }
+
+.ghead.letter { font-size: 22px; font-weight: 800; }
+.jump button { min-width: 34px; padding: 0 10px; font-weight: 600; font-family: var(--head); }
+
+.actions.two { grid-template-columns: 1fr 1fr; }
+.text.short { max-width: 160px; }
+.synctxt { white-space: nowrap; }
+.tabs button { min-width: 0; }
+.tabs .sh { display: none; }
+@media (max-width: 370px) {
+  .tabs .lg { display: none; }
+  .tabs .sh { display: inline; }
+  .synctxt { display: none; }
+  .brand { font-size: 26px; }
+  .qtyctl .amt { min-width: 52px; font-size: 15px; }
+}
