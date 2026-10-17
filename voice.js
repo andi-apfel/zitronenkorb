@@ -43,12 +43,13 @@ function numberize(tokens) {
 // ── Satzteile, Absicht und Füllwörter ──
 const RE_LIST = /\b(brauche|brauchen|braucht|benoetigen|kaufen|einkaufen|besorgen|holen|einkaufsliste|liste|fehlt|fehlen|nachkaufen|mitbringen)\b/;
 const RE_STOCK = /\b(lager|haben wir|wir haben|hab ich|habe ich|haben noch|noch da|vorhanden|vorrat|vorraetig|kuehlschrank|schrank|tiefkuehler|gefrierschrank|daheim|zuhause|zu hause|gibt es noch|ist noch|sind noch)\b/;
-const RE_EMPTY = /\b(alle|leer|aufgebraucht|ausgegangen|verbraucht)\b|\bkeine?[nrs]?\b.*\bmehr\b/;
+const RE_EMPTY = /\b(alle|leer|futsch|kaputt|hinueber|abgelaufen|verschimmelt|schimmelig|schlecht geworden|aufgebraucht|ausgegangen|verbraucht)\b|\bkeine?[nrs]?\b.*\bmehr\b/;
+const RE_LOW = /\b(wird knapp|werden knapp|wird langsam knapp|knapp|fast leer|fast alle|fast aufgebraucht|geht zur neige|gehen zur neige)\b/;
 const STOP = new Set(('im in auf an der die das dem den des wir ich du ihr sie es man haben hab habe hat hast noch brauche brauchen braucht benoetigen kaufen einkaufen ' +
   'besorgen holen mitbringen muessen muss musst sollten sollen bitte mal auch ausserdem dann und oder also aehm aeh hm so etwa ungefaehr circa ca rund nur mehr alle leer ' +
   'aus fehlt fehlen vorhanden vorraetig zu hause zuhause daheim lager vorrat kuehlschrank tiefkuehler gefrierschrank schrank liste einkaufsliste da gibt gibts ist sind ' +
   'keine kein keinen keiner setz setze schreib schreibe trag trage ein mir uns was folgt folgendes dazu nachkaufen aufgebraucht ausgegangen verbraucht neue neues neuen ' +
-  'naechste naechsten mal fuer von vom zum zur').split(' '));
+  'naechste naechsten mal fuer von vom zum zur futsch kaputt hinueber abgelaufen verschimmelt schimmelig schlecht geworden knapp wird werden fast langsam neige geht gehen oder').split(' '));
 
 function splitClauses(text) {
   return String(text || '')
@@ -63,8 +64,9 @@ function parseSpeech(text, defaultMode) {
   const out = [];
   for (const clause of splitClauses(text)) {
     const f = ' ' + fold(clause).replace(/[^a-z0-9.,\s-]/g, ' ').replace(/\s+/g, ' ').trim() + ' ';
-    let target = mode, empty = false;
-    if (RE_EMPTY.test(f)) { target = 'liste'; empty = true; mode = 'liste'; }
+    let target = mode, empty = false, low = false;
+    if (RE_LOW.test(f)) { target = 'liste'; low = true; mode = 'liste'; }
+    else if (RE_EMPTY.test(f)) { target = 'liste'; empty = true; mode = 'liste'; }
     else if (RE_LIST.test(f)) { target = mode = 'liste'; }
     else if (RE_STOCK.test(f)) { target = mode = 'lager'; }
     // Wörter in der Originalschreibweise behalten, aber gefaltet vergleichen
@@ -79,7 +81,7 @@ function parseSpeech(text, defaultMode) {
     const orig = {};
     clause.toLowerCase().split(/\s+/).forEach((w) => { const c = w.replace(/^[^a-zäöüß0-9]+|[^a-zäöüß0-9-]+$/g, ''); if (c) orig[fold(c)] = orig[fold(c)] || c; });
     name = name.split(' ').map((w) => orig[w] || w).join(' ');
-    out.push({ target, name, qty: p.qty, unit: p.unit, empty });
+    out.push({ target, name, qty: p.qty, unit: p.unit, empty, low });
   }
   return out;
 }
@@ -98,12 +100,12 @@ function voiceRows(text, defaultMode) {
     const it = matchSpoken(e.name);
     let unit = e.unit;
     if (e.qty && !unit) unit = it && COUNT_UNITS.has(it.unit) ? it.unit : 'Stk';
-    const row = { src: norm(e.name), target: e.target, itemId: it ? it.id : null, name: it ? it.name : cap(e.name), qty: e.qty, unit: e.qty ? unit : null, empty: e.empty, isNew: !it };
+    const row = { src: norm(e.name), target: e.target, itemId: it ? it.id : null, name: it ? it.name : cap(e.name), qty: e.qty, unit: e.qty ? unit : null, empty: e.empty, low: e.low, isNew: !it };
     const dupe = rows.find((r) => r.target === row.target && (row.itemId ? r.itemId === row.itemId : norm(r.name) === norm(row.name)));
     if (dupe) {
       if (row.qty && dupe.qty) { const c = convert(row.qty, row.unit, dupe.unit); if (c != null) dupe.qty = round3(dupe.qty + c); }
       else if (row.qty) { dupe.qty = row.qty; dupe.unit = row.unit; }
-      dupe.empty = dupe.empty || row.empty;
+      dupe.empty = dupe.empty || row.empty; dupe.low = dupe.low || row.low;
       continue;
     }
     rows.push(row);
@@ -130,17 +132,13 @@ function applyVoice(rows) {
         it = { id: 'u-' + rid(10), name: r.name, cat: guessCat(r.name), qty: r.qty && PURCHASE.has(r.unit) ? r.qty : 1, unit: r.qty && PURCHASE.has(r.unit) ? r.unit : 'Stk', uses: 0, created: Date.now() };
         put('item', it); created++;
       }
-      const s = get('stock', it.id);
       if (r.target === 'liste') {
         addToList(it.id, r.qty || it.qty, r.qty ? r.unit : it.unit, { silent: true });
-        if (r.empty && s && s.qty > 0) put('stock', Object.assign({}, s, { qty: 0, at: Date.now() }));
+        if (r.empty) setState(it.id, 'leer', { silent: true });
+        else if (r.low) setState(it.id, 'knapp', { silent: true });
         nList++;
       } else {
-        // Ins Lager: genannte Menge ist der aktuelle Bestand; ohne Menge bleibt ein vorhandener Bestand stehen
-        if (!r.qty && s && s.qty > 0) { nStock++; continue; }
-        const ns = Object.assign({ min: null }, s || {}, { id: it.id, qty: r.qty || it.qty, unit: r.qty ? r.unit : it.unit, at: Date.now() });
-        put('stock', ns);
-        if (isLow(ns) && !listOpen(it.id)) put('list', { id: it.id, qty: it.qty, unit: it.unit, checked: false, at: Date.now(), auto: true });
+        setState(it.id, 'da', { silent: true });
         nStock++;
       }
     }
@@ -164,7 +162,7 @@ function openVoice() {
       <button type="button" role="radio" data-act="vmode" data-v="liste">Auf die Liste</button>
       <button type="button" role="radio" data-act="vmode" data-v="lager">Ins Lager</button>
     </div>
-    <p class="sub vsub">Gilt für alles, wozu du nichts sagst. „Haben wir“ geht ins Lager, „brauchen wir“ und „ist alle“ auf die Liste.</p>
+    <p class="sub vsub">Gilt für alles, wozu du nichts sagst. „Haben wir“ geht ins Lager, „brauchen wir“ auf die Liste. „Ist leer“, „ist futsch“ oder „wird knapp“ kommt auf die Liste und wird im Lager so markiert.</p>
     <label class="field vlabel" for="vText"><span>Erkannter Text, hier kannst du jederzeit korrigieren</span></label>
     <div class="vbox">
       <textarea id="vText" class="text area" rows="4" placeholder="z. B.: Im Lager haben wir zwei Liter Milch, sechs Eier und ein Kilo Mehl. Wir brauchen Butter, Zitronen und Spülmittel."></textarea>
@@ -211,18 +209,18 @@ function renderVoicePreview() {
     const idx = rows.map((r, i) => [r, i]).filter(([r]) => r.target === target);
     if (!idx.length) return '';
     return `<section class="group vgroup"><h3 class="ghead">${title}<small>${idx.length}</small></h3><ul class="rows">${idx.map(([r, i]) => {
-      const it = r.itemId ? get('item', r.itemId) : null, s = it ? get('stock', it.id) : null;
-      const ph = target === 'lager' && s && s.qty > 0 ? fmtQty(s.qty) + ' ' + s.unit : it ? fmtQty(it.qty) + ' ' + it.unit : '1 Stk';
-      const tags = (r.isNew ? `<span class="tag list">neu: ${esc(catName(guessCat(r.name)))}</span>` : '') + (r.empty ? '<span class="tag low">ist alle</span>' : '');
+      const it = r.itemId ? get('item', r.itemId) : null;
+      const ph = it ? fmtQty(it.qty) + ' ' + it.unit : '1 Stk';
+      const tags = (r.isNew ? `<span class="tag list">neu: ${esc(catName(guessCat(r.name)))}</span>` : '') + (r.empty ? '<span class="tag low">leer oder futsch</span>' : r.low ? '<span class="tag low">wird knapp</span>' : '');
       return `<li class="row vrow">
         <span class="stack"><input class="vname" data-i="${i}" value="${esc(r.name)}" list="fundusNames" aria-label="Artikel" autocomplete="off" autocapitalize="sentences" enterkeyhint="done">${tags ? '<span class="tags">' + tags + '</span>' : ''}</span>
-        <input class="vamt" data-i="${i}" value="${r.qty ? esc(fmtQty(r.qty) + ' ' + r.unit) : ''}" placeholder="${esc(ph)}" aria-label="Menge für ${esc(r.name)}" autocomplete="off">
+        ${target === 'liste' ? `<input class="vamt" data-i="${i}" value="${r.qty ? esc(fmtQty(r.qty) + ' ' + r.unit) : ''}" placeholder="${esc(ph)}" aria-label="Menge für ${esc(r.name)}" autocomplete="off">` : '<span class="vstate">ist da</span>'}
         <button class="vmove" type="button" data-act="vtoggle" data-i="${i}" aria-label="${esc(r.name)} ${target === 'liste' ? 'stattdessen ins Lager' : 'stattdessen auf die Liste'}">${target === 'liste' ? 'Lager' : 'Liste'}</button>
         <button class="vx" type="button" data-act="vdel" data-i="${i}" aria-label="${esc(r.name)} entfernen">×</button>
       </li>`;
     }).join('')}</ul></section>`;
   };
-  box.innerHTML = rows.length ? '<p class="hint">Falsch verstanden? Tippe auf einen Namen oder eine Menge und ändere sie. Graue Mengen gelten, wenn du nichts einträgst: auf der Liste die übliche Menge, im Lager der bisherige Bestand.</p>' + group('liste', 'Auf die Liste') + group('lager', 'Ins Lager') : '';
+  box.innerHTML = rows.length ? '<p class="hint">Falsch verstanden? Tippe auf einen Namen oder eine Menge und ändere sie. Graue Mengen gelten, wenn du nichts einträgst.</p>' + group('liste', 'Auf die Liste') + group('lager', 'Ins Lager') : '';
   const go = $('#vGo');
   if (go) { go.disabled = !rows.length; go.textContent = rows.length ? rows.length + (rows.length === 1 ? ' Eintrag übernehmen' : ' Einträge übernehmen') : 'Nichts erkannt'; }
 }

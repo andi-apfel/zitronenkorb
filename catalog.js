@@ -86,8 +86,7 @@ applySeeds = function () { _applySeedsBase(); applyCatalog(); };
 
 // ── Vorschläge aus dem Lager ──
 const FRESH_CATS = new Set(['c-obst', 'c-kuehl', 'c-veggie', 'c-brot']);
-const BASIC = new Set(['i-salz', 'i-pfeffer', 'i-zucker', 'i-olivenoel', 'i-rapsoel']);
-const isBasic = (it) => BASIC.has(it.id) || catOf(it) === 'c-gewuerze';
+const isBasic = (it) => isBasicItem(it);
 const isOwn = (r) => !r.catalog || r.saved;
 
 function scoreRecipe(r) {
@@ -99,10 +98,9 @@ function scoreRecipe(r) {
     const w = isBasic(it) ? 0.2 : 1;
     tot += w;
     if (n.state === 'have') got += w;
-    else if (n.state === 'check' || n.state === 'partial') got += w * 0.6;
     if (w === 1 && n.state === 'missing') missing.push(it.name);
-    if (w === 1 && n.state === 'partial') low.push(it.name);
-    if (w === 1 && n.have && FRESH_CATS.has(catOf(it))) uses.push(it.name);
+    if (w === 1 && n.have && n.have.state === 'knapp') low.push(it.name);
+    if (w === 1 && n.have && !n.have.basic && FRESH_CATS.has(catOf(it))) uses.push(it.name);
   }
   const main = needs.filter((n) => !isBasic(get('item', n.item)));
   const haveMain = main.filter((n) => n.state !== 'missing').length;
@@ -116,11 +114,11 @@ function suggestions() {
   const all = window.all('recipe').filter((r) => (r.ings || []).length);
   return all.map(scoreRecipe).sort((a, b) => b.score - a.score || a.r.title.localeCompare(b.r.title, 'de'));
 }
-const stockCount = () => window.all('stock').filter((s) => s.qty > 0).length;
+const stockCount = () => window.all('stock').filter((s) => inStock(s.id)).length;
 
 function ideaCard(s) {
   const pct = s.mainTotal ? Math.round((s.haveMain / s.mainTotal) * 100) : 0;
-  const what = s.ready ? (s.low.length ? 'Alles da, knapp: ' + s.low.join(', ') : 'Alles da') : 'Es fehlt: ' + s.missing.join(', ');
+  const what = s.ready ? (s.low.length ? 'Alles da, wird knapp: ' + s.low.join(', ') : 'Alles da') : 'Es fehlt: ' + s.missing.join(', ');
   return `<li class="idea"><button type="button" data-act="openrecipe" data-id="${esc(s.r.id)}">
     <span class="ihead"><span class="ititle">${esc(s.r.title)}</span>${isOwn(s.r) ? '' : '<span class="tag plain">Idee</span>'}</span>
     <span class="imeter" role="img" aria-label="${s.haveMain} von ${s.mainTotal} Hauptzutaten da"><span style="width:${pct}%"></span></span>

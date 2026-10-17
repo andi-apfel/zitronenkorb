@@ -396,3 +396,28 @@ main { padding: 0 16px; outline: 0; }
 .importfail { margin-top: 14px; padding: 12px; border-radius: 12px; border: 1.5px solid var(--line); }
 .importfail p { margin: 0 0 8px; font-size: 15px; }
 .importfail .btn { width: 100%; height: 46px; font-size: 16px; }
+
+/* ── Lager mit Zuständen ── */
+.stq {
+  flex: none; height: 38px; padding: 0 12px; border-radius: 19px; border: 1.5px solid var(--line); background: transparent;
+  font-size: 14px; font-weight: 600; color: var(--ink); white-space: nowrap;
+}
+.stq.warn, .stockrow:not(.gone) .stq { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, var(--line)); }
+.stockrow.gone .stq { color: var(--leaf); border-color: color-mix(in srgb, var(--leaf) 40%, var(--line)); }
+.statepick { display: grid; gap: 8px; margin-top: 14px; }
+.stbtn { height: 54px; border-radius: 14px; border: 2px solid var(--line); background: transparent; font-weight: 650; font-size: 17px; color: var(--ink); text-align: left; padding: 0 16px; }
+.stbtn[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--bg); }
+.stbtn.knapp[aria-pressed="false"] { border-color: color-mix(in srgb, var(--lemon) 70%, var(--line)); }
+.stbtn.leer[aria-pressed="false"] { color: var(--danger); }
+.checkcard { margin-top: 14px; padding: 14px; border-radius: 14px; background: var(--lemon-soft); color: var(--lemon-ink); }
+.checkcard b { display: block; font-family: var(--head); font-size: 18px; font-weight: 700; letter-spacing: -0.015em; color: var(--ink); }
+.checkcard span { display: block; font-size: 15px; margin-top: 2px; color: var(--ink); }
+.checkcard .btnrow { margin-top: 10px; }
+.checkcard .btn.quiet { color: var(--ink); }
+.checklist .row { gap: 6px; padding: 6px 0; }
+.checklist .name { flex: 1; min-width: 0; }
+.vstate { flex: none; color: var(--muted); font-size: 14px; padding: 0 6px; }
+.cookpick { margin-top: 12px; }
+.cookpick .chip { height: 42px; font-size: 16px; }
+.cookpick .chip[aria-pressed="true"] { background: var(--danger); border-color: var(--danger); color: #fff; }
+@media (max-width: 370px) { .stq { padding: 0 9px; font-size: 13px; } }

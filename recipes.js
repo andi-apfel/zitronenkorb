@@ -105,23 +105,15 @@ function collectNeeds(entries) {
   return [...by.values()];
 }
 function needStatus(n) {
-  const item = get('item', n.item), s = get('stock', n.item), e = listOpen(n.item);
-  const r = Object.assign({}, n, { name: item.name, have: s && s.qty > 0 ? s : null, onList: e, missing: null });
-  if (r.have) {
-    if (n.qty == null || n.mixed) r.state = 'have';
-    else {
-      const h = convert(r.have.qty, r.have.unit, n.unit);
-      if (h == null) r.state = 'check';
-      else if (h >= n.qty - 1e-9) r.state = 'have';
-      else { r.state = 'partial'; r.missing = round3(n.qty - h); }
-    }
-  } else { r.state = 'missing'; r.missing = n.qty; }
-  // Einkaufsmenge: fehlende Menge, wenn sie sich kaufen lässt, sonst die übliche Einkaufsmenge
-  const m = r.missing;
-  if (m != null && !n.mixed && PURCHASE.has(n.unit)) { r.buyQty = roundUp(m, n.unit); r.buyUnit = n.unit; }
+  const item = get('item', n.item), st = stockState(n.item), e = listOpen(n.item);
+  const avail = inStock(n.item);
+  const r = Object.assign({}, n, { name: item.name, have: avail ? { state: st || 'da', basic: !st } : null, onList: e, missing: avail ? null : n.qty });
+  r.state = avail ? 'have' : 'missing';
+  // Einkaufsmenge: benötigte Menge, wenn sie sich so kaufen lässt, sonst die übliche Einkaufsmenge
+  if (!avail && n.qty != null && !n.mixed && PURCHASE.has(n.unit)) { r.buyQty = roundUp(n.qty, n.unit); r.buyUnit = n.unit; }
   else { r.buyQty = item.qty; r.buyUnit = item.unit; }
   if (e) { const c = convert(r.buyQty, r.buyUnit, e.unit); r.covered = c == null || e.qty >= c - 1e-9; }
-  r.pick = (r.state === 'missing' || r.state === 'partial') && !r.covered;
+  r.pick = !avail && !r.covered;
   return r;
 }
 function recipeEntries(r, serv) {
@@ -134,38 +126,28 @@ function recipeSummary(r) {
   return { miss, total: st.length };
 }
 
-// ── Kochen: Zutaten aus dem Lager abziehen ──
+// ── Kochen: Mahlzeit abhaken und fragen, ob etwas leer oder futsch geworden ist ──
 function cook(recipeId, serv, date, idx) {
   const r = get('recipe', recipeId);
   if (!r) return;
-  const f = serv / (r.servings || 1);
-  let used = 0, skipped = 0; const auto = [];
-  const undo = tx(() => {
-    for (const ing of r.ings || []) {
-      if (!(ing.qty > 0) || !get('item', ing.item)) { skipped++; continue; }
-      const s = get('stock', ing.item);
-      if (!s || !(s.qty > 0)) { skipped++; continue; }
-      const c = convert(ing.qty * f, ing.unit, s.unit);
-      if (c == null) { skipped++; continue; }
-      const ns = Object.assign({}, s, { qty: Math.max(0, round3(s.qty - c)), at: Date.now() });
-      put('stock', ns); used++;
-      if (isLow(ns) && !isLow(s) && !listOpen(ing.item)) {
-        const it = get('item', ing.item);
-        put('list', { id: ing.item, qty: it.qty, unit: it.unit, checked: false, at: Date.now(), auto: true });
-        auto.push(it.name);
-      }
-    }
+  tx(() => {
     if (date != null) {
       const p = get('plan', date);
       if (p && p.meals[idx]) { const meals = p.meals.slice(); meals[idx] = Object.assign({}, meals[idx], { done: true }); put('plan', Object.assign({}, p, { meals })); }
     }
     put('recipe', Object.assign({}, r, { cooked: (r.cooked || 0) + 1, lastCooked: Date.now() }));
   });
-  let msg = 'Guten Appetit! ' + (used ? used + (used === 1 ? ' Zutat' : ' Zutaten') + ' aus dem Lager abgezogen.' : 'Im Lager war nichts abzuziehen.');
-  if (auto.length) msg += ' Knapp und auf der Liste: ' + auto.join(', ') + '.';
-  toast(msg, undo);
+  // Zutaten, die laut Lager da waren: Hauptzutaten zuerst, Grundzutaten danach
+  const seen = new Set();
+  const used = (r.ings || []).map((i) => get('item', i.item)).filter((it) => it && !seen.has(it.id) && seen.add(it.id) && inStock(it.id))
+    .sort((a, b) => (isBasicItem(a) - isBasicItem(b)) || a.name.localeCompare(b.name, 'de'));
+  UI.cookPick = new Set();
+  if (!used.length) { toast('Guten Appetit!'); return; }
+  openSheet(`<h2>Guten Appetit!</h2>
+    <p class="sub">Ist beim Kochen etwas leer oder futsch geworden? Tippe es an, dann kommt es auf die Liste.</p>
+    <div class="chips cookpick">${used.map((it) => `<button class="chip" type="button" data-act="cooktoggle" data-id="${esc(it.id)}" aria-pressed="false">${esc(it.name)}</button>`).join('')}</div>
+    <div class="actions"><button class="btn primary" type="button" data-act="cookdone" id="cookGo">Nein, alles noch da</button></div>`, 'cooked');
 }
-
 // ── Wochenplan ──
 const pad2 = (n) => String(n).padStart(2, '0');
 const isoDay = (d) => d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
@@ -255,11 +237,9 @@ function renderRecipeSearch() {
 
 // ── Rezeptansicht ──
 function statusTag(x) {
-  if (x.state === 'have') return `<span class="tag stock">im Lager${x.have ? ': ' + esc(fmtAmt(x.have.qty, x.have.unit)) : ''}</span>`;
-  if (x.state === 'check') return `<span class="tag stock">im Lager: ${esc(fmtAmt(x.have.qty, x.have.unit))}, Menge prüfen</span>`;
+  if (x.state === 'have') return x.have.basic ? '<span class="tag stock">Grundzutat, da</span>' : x.have.state === 'knapp' ? '<span class="tag low">da, wird knapp</span>' : '<span class="tag stock">im Lager</span>';
   if (x.covered) return `<span class="tag list">steht auf der Liste</span>`;
-  if (x.state === 'partial') return `<span class="tag list">im Lager: ${esc(fmtAmt(x.have.qty, x.have.unit))}, es fehlen ${esc(fmtAmt(x.missing, x.unit))}</span>`;
-  return '<span class="tag list">fehlt</span>';
+  return stockState(x.item) === 'leer' ? '<span class="tag list">leer oder futsch</span>' : '<span class="tag list">fehlt</span>';
 }
 function openRecipe(id, opts = {}) {
   const r = get('recipe', id);
@@ -293,7 +273,7 @@ function openRecipe(id, opts = {}) {
       <button class="btn primary" type="button" data-act="recipeshop">${miss ? 'Fehlendes auf die Liste' : 'Zutaten auf die Liste'}</button>
       <button class="btn" type="button" data-act="${planned ? 'unplan' : 'planrecipe'}">${planned ? 'Aus dem Plan nehmen' : 'Einplanen'}</button>
     </div>
-    <div class="actions"><button class="btn lemon" type="button" data-act="cook">Gekocht: Zutaten aus dem Lager abziehen</button></div>
+    <div class="actions"><button class="btn lemon" type="button" data-act="cook">Gekocht</button></div>
     ${steps ? `<h3>Zubereitung</h3><ol class="steps">${steps}</ol>` : ''}
     ${r.notes ? `<h3>Notizen</h3><p class="notes">${esc(r.notes)}</p>` : ''}
     ${r.url ? `<p class="source"><a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">Originalrezept öffnen</a></p>` : ''}
@@ -417,6 +397,20 @@ Object.assign(actions, {
     toast(picked.length + (picked.length === 1 ? ' Zutat steht' : ' Zutaten stehen') + ' jetzt auf der Liste', undo);
   },
   cook: () => { const v = UI.rv; if (!v) return; closeSheet(); cook(v.id, v.serv, v.date, v.idx); },
+  cooktoggle: (b) => {
+    const on = b.getAttribute('aria-pressed') !== 'true';
+    b.setAttribute('aria-pressed', String(on));
+    if (on) UI.cookPick.add(b.dataset.id); else UI.cookPick.delete(b.dataset.id);
+    const n = UI.cookPick.size, go = $('#cookGo');
+    if (go) go.textContent = n ? n + (n === 1 ? ' Sache ist leer oder futsch' : ' Sachen sind leer oder futsch') : 'Nein, alles noch da';
+  },
+  cookdone: () => {
+    const ids = [...(UI.cookPick || [])];
+    closeSheet();
+    if (!ids.length) { toast('Guten Appetit!'); return; }
+    const undo = tx(() => ids.forEach((id) => setState(id, 'leer', { silent: true })));
+    toast(ids.map((id) => get('item', id).name).join(', ') + (ids.length === 1 ? ' steht' : ' stehen') + ' jetzt auf der Liste', undo);
+  },
   planrecipe: () => {
     const v = UI.rv; if (!v) return;
     const r = get('recipe', v.id);

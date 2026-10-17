@@ -5,12 +5,15 @@ Gemeinsame Einkaufsliste von Hanne und Andi. Schwesterprojekt der [Zitronenpress
 - **App:** https://andi-apfel.github.io/zitronenkorb/ (aufs iPhone per Safari „Teilen → Zum Home-Bildschirm“)
 - **Einkaufsliste:** was zu besorgen ist, nach Laufweg sortiert, Mengen Pflicht, Abhaken in den Korb.
   „Einkauf abschließen“ bucht alles Abgehakte ins Zitronenlager.
-- **Zitronenlager:** alles in Küche und Vorrat, alphabetisch, Plus/Minus pro Artikel. „Nachkaufen ab“ setzt einen Artikel
-  automatisch auf die Liste, sobald der Bestand darauf fällt.
-- **Fundus:** alle bekannten Artikel alphabetisch als Schnellauswahl. Antippen → „Wie viel?“ → ins Lager oder auf die Liste.
+- **Zitronenlager:** kennt keine Mengen, nur Zustände: **da**, **wird knapp**, **leer oder futsch**. „Einkauf abschließen“ setzt
+  alles Eingekaufte auf da. Ein Tipp auf „leer oder futsch“ (oder „wird knapp“) setzt den Artikel automatisch auf die Liste.
+  Grundzutaten (Salz, Pfeffer, Zucker, Mehl, Öl, Gewürze) gelten als da, bis jemand „leer oder futsch“ sagt.
+  Nach „Gekocht“ fragt die App, ob etwas leer oder futsch geworden ist. **Check vorm Einkauf:** Was 7 Tage niemand bestätigt
+  hat, bietet die Liste kurz zum Prüfen an (noch da / leer oder futsch).
+- **Fundus:** alle bekannten Artikel alphabetisch als Schnellauswahl. Antippen → Menge für die Liste oder „Ist im Lager“.
 - **Rezepte:** Zutaten Zeile für Zeile eintippen oder einfügen („500 g Spaghetti“, „½ TL Salz“, „2 Zehen Knoblauch“),
   die App ordnet sie dem Fundus zu und warnt bei vermutlich nicht vegetarischen Zutaten. Portionen umrechnen,
-  Abgleich mit dem Lager, „Fehlendes auf die Liste“ mit Vorauswahl, „Gekocht“ zieht die Zutaten vom Lager ab.
+  Abgleich mit dem Lager, „Fehlendes auf die Liste“ mit Vorauswahl, „Gekocht“ fragt nach Leergewordenem.
 - **Rezept-Import per Link:** „Rezept aus Link importieren“ (oder Link ins Suchfeld der Rezepte einfügen). Die Supabase-Funktion
   `zk-recipe` liest die schema.org-Rezeptdaten der Seite (Chefkoch, gutekueche.at u. v. m.), der Editor öffnet sich vorbefüllt zum Prüfen.
   Sperrt eine Seite den Abruf: „Zutaten selbst einfügen“.
@@ -19,7 +22,7 @@ Gemeinsame Einkaufsliste von Hanne und Andi. Schwesterprojekt der [Zitronenpress
   und frischen Zutaten, die verbraucht werden; kürzlich Gekochtes rückt nach hinten. Ideen lassen sich übernehmen.
 - **Wochenplan:** Rezepte auf Tage legen, „Fehlendes für die Woche auf die Liste“ fasst alles zusammen.
 - **Sprache:** Mikrofon im Suchfeld. Frei sprechen oder diktieren („Im Lager haben wir zwei Liter Milch, wir brauchen
-  Butter, die Haferflocken sind alle“); Vorschau mit Ziel je Eintrag, Mengen änderbar. Ins Lager gilt die genannte Menge als Bestand.
+  Butter, die Haferflocken sind alle“); Vorschau mit Ziel je Eintrag, Mengen für die Liste änderbar. „Ist leer/futsch“ und „wird knapp“ setzen den Zustand und die Liste.
 - Rückgängig, Live-Abgleich zwischen beiden Handys, offline nutzbar.
 - **Dateien:** `index.html` (Gerüst), `app.css` (Gestaltung), `app.js` (Logik und Abgleich), `recipes.js` (Rezepte und Wochenplan), `catalog.js` (Rezeptideen und Vorschläge), `import.js` (Rezept-Import), `voice.js` (Spracherfassung), `seed.js` (Startkategorien und
   vegetarischer Grundfundus), `config.js` (öffentliche Supabase-Adresse), `sw.js` (Offline-Speicher).

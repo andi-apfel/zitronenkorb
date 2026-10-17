@@ -4,7 +4,7 @@
 
 const CFG = window.ZK_CONFIG || {};
 const UNITS = window.ZK_UNITS;
-const VERSION = '1.5.1';
+const VERSION = '2.0';
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const rid = (n = 12) => { const a = 'abcdefghijkmnopqrstuvwxyz23456789'; const b = crypto.getRandomValues(new Uint8Array(n)); return Array.from(b, (x) => a[x % a.length]).join(''); };
@@ -177,41 +177,45 @@ function addToList(itemId, qty, unit, opts = {}) {
   if (!opts.silent) toast(open ? item.name + ': jetzt ' + fmtAmt(next.qty, next.unit) + ' auf der Liste' : item.name + ' (' + fmtAmt(next.qty, next.unit) + ') steht auf der Liste', undo);
 }
 
-// Ins Zitronenlager: zum vorhandenen Bestand dazuzählen.
-function addToStock(itemId, qty, unit) {
+// ── Zitronenlager: Zustand statt Menge ──
+// Jeder Lager-Eintrag hat einen Zustand: 'da', 'knapp' (wird knapp) oder 'leer' (leer oder futsch).
+// „at“ ist die letzte Änderung oder Bestätigung. Alte Einträge mit Mengen werden beim Lesen umgedeutet.
+const STATE_LABEL = { da: 'da', knapp: 'wird knapp', leer: 'leer oder futsch' };
+const BASIC_IDS = new Set(['i-salz', 'i-pfeffer', 'i-zucker', 'i-olivenoel', 'i-rapsoel', 'i-mehl']);
+const isBasicItem = (it) => !!it && (BASIC_IDS.has(it.id) || catOf(it) === 'c-gewuerze');
+function stockState(id) {
+  const s = get('stock', id);
+  if (!s) return null;
+  if (s.state) return s.state;
+  return s.qty > 0 ? 'da' : 'leer';
+}
+// Vorhanden heißt: da oder wird knapp; Grundzutaten gelten als da, solange niemand „leer oder futsch“ sagt
+function inStock(id) {
+  const st = stockState(id);
+  if (st) return st === 'da' || st === 'knapp';
+  return isBasicItem(get('item', id));
+}
+const isLow = (s) => !!s && (s.state === 'knapp' || (!s.state && s.min > 0 && s.qty <= s.min));
+// Zustand setzen. „Wird knapp“ und „leer oder futsch“ setzen den Artikel automatisch auf die Liste.
+function setState(itemId, state, opts = {}) {
   const item = get('item', itemId);
-  if (!item || !(qty > 0)) return;
-  const cur = get('stock', itemId);
-  const next = sumInto(cur, qty, unit || item.unit);
-  const undo = tx(() => put('stock', Object.assign({ min: null }, cur || {}, { id: itemId, qty: next.qty, unit: next.unit, at: Date.now() })));
-  toast(item.name + ': ' + fmtAmt(next.qty, next.unit) + ' im Zitronenlager', undo);
-}
-
-// Bestand ändern. Fällt er auf die Mindestmenge oder darunter, kommt der Artikel automatisch auf die Liste.
-function setStock(itemId, qty, unit, min) {
-  const item = get('item', itemId), cur = get('stock', itemId);
-  if (!item) return;
-  const s = Object.assign({ min: null }, cur || {}, { id: itemId, qty: Math.max(0, round3(qty)), unit: unit || (cur && cur.unit) || item.unit, at: Date.now() });
-  if (min !== undefined) s.min = min > 0 ? round3(min) : null;
-  const wasLow = cur ? isLow(cur) : false;
-  let auto = false;
+  if (!item) return null;
+  const toList = (state === 'knapp' || state === 'leer') && !listOpen(itemId);
   const undo = tx(() => {
-    put('stock', s);
-    if (isLow(s) && !wasLow && !listOpen(itemId)) {
-      auto = true;
-      put('list', { id: itemId, qty: item.qty, unit: item.unit, checked: false, at: Date.now(), auto: true });
-    }
+    put('stock', { id: itemId, state, at: Date.now() });
+    if (toList) put('list', { id: itemId, qty: item.qty, unit: item.unit, checked: false, at: Date.now(), auto: true });
   });
-  if (auto) toast(item.name + ' wird knapp und steht jetzt auf der Liste', undo);
+  if (!opts.silent) {
+    const msg = state === 'da' ? item.name + ' ist im Lager'
+      : item.name + (state === 'knapp' ? ' wird knapp' : ' ist leer oder futsch') + (toList ? ' und steht jetzt auf der Liste' : ', steht schon auf der Liste');
+    toast(msg, undo);
+  }
+  return undo;
 }
-const isLow = (s) => !!(s && s.min > 0 && s.qty <= s.min);
-function stepStock(itemId, dir) {
+// „Noch da“ bestätigen (für den Check vorm Einkauf)
+function confirmStock(itemId) {
   const s = get('stock', itemId);
-  if (!s) return;
-  const st = stepFor(s.unit, dir < 0 ? Math.max(0, s.qty - 0.0001) : s.qty);
-  let q = dir < 0 ? s.qty - st : s.qty + st;
-  q = q < st / 2 ? 0 : Math.round(q / st) * st;
-  setStock(itemId, q);
+  tx(() => put('stock', { id: itemId, state: s && s.state === 'knapp' ? 'knapp' : 'da', at: Date.now() }));
 }
 function removeFromStock(id) {
   const item = get('item', id);
@@ -236,9 +240,7 @@ function finishTrip() {
   const undo = tx(() => {
     put('trip', { id: 't-' + rid(10), at: Date.now(), items: done.map((e) => ({ item: e.id, qty: e.qty, unit: e.unit })) });
     done.forEach((e) => {
-      const cur = get('stock', e.id);
-      const next = sumInto(cur, e.qty, e.unit);
-      put('stock', Object.assign({ min: null }, cur || {}, { id: e.id, qty: next.qty, unit: next.unit, at: Date.now() }));
+      put('stock', { id: e.id, state: 'da', at: Date.now() });
       del('list', e.id);
     });
   });
@@ -408,7 +410,7 @@ function groupByCat(rows, itemOf) {
 function listRow(e, item) {
   return `<li class="row${e.checked ? ' done' : ''}">
     <button class="check" type="button" data-act="check" data-id="${esc(e.id)}" aria-label="${esc(item.name)} ${e.checked ? 'wieder offen' : 'abhaken'}" aria-pressed="${e.checked}">${SLICE}</button>
-    <button class="main" type="button" data-act="amount" data-id="${esc(e.id)}"><span class="name">${esc(item.name)}${e.auto ? ' <span class="tag low">knapp</span>' : ''}</span><span class="amt">${fmtAmt(e.qty, e.unit)}</span></button>
+    <button class="main" type="button" data-act="amount" data-id="${esc(e.id)}"><span class="name">${esc(item.name)}${e.checked ? '' : stockState(e.id) === 'leer' ? ' <span class="tag plain">leer oder futsch</span>' : stockState(e.id) === 'knapp' ? ' <span class="tag low">wird knapp</span>' : ''}</span><span class="amt">${fmtAmt(e.qty, e.unit)}</span></button>
   </li>`;
 }
 
@@ -421,7 +423,7 @@ function renderList() {
   } else if (!open.length) {
     h += `<div class="empty"><p class="big">Alles im Korb.</p><p>Wenn ihr fertig seid, schließt den Einkauf unten ab. Dann wandert alles ins Zitronenlager.</p></div>`;
   }
-  h += renderOften();
+  h = renderCheckCard() + h + renderOften();
   groupByCat(open, (e) => get('item', e.id)).forEach(({ cat, rows }) => {
     rows.sort((a, b) => byName(get('item', a.id), get('item', b.id)));
     h += `<section class="group"><h2 class="ghead">${esc(cat.name)}<small>${rows.length}</small></h2><ul class="rows">${rows.map((e) => listRow(e, get('item', e.id))).join('')}</ul></section>`;
@@ -433,6 +435,43 @@ function renderList() {
       <p class="hint">Alles im Korb wandert dann ins Zitronenlager.</p></section>`;
   }
   return h;
+}
+
+// ── Check vorm Einkauf: Was länger niemand bestätigt hat, kurz prüfen ──
+const CHECK_DAYS = 7;
+const todayKey = () => new Date().toDateString();
+function checkCandidates() {
+  const cut = Date.now() - CHECK_DAYS * 864e5;
+  return all('stock').filter((s) => {
+    const it = get('item', s.id), st = stockState(s.id);
+    return it && (st === 'da' || st === 'knapp') && !isBasicItem(it) && !listOpen(s.id) && (s.at || 0) < cut;
+  }).sort((x, y) => (x.at || 0) - (y.at || 0)).slice(0, 12);
+}
+function renderCheckCard() {
+  if (S.checkSnooze === todayKey()) return '';
+  const c = checkCandidates();
+  if (!c.length) return '';
+  return `<section class="checkcard"><div><b>Vorm Einkauf kurz prüfen</b>
+    <span>${c.length === 1 ? 'Eine Sache' : c.length + ' Sachen'} im Lager hat länger niemand bestätigt. Noch da?</span></div>
+    <div class="btnrow"><button class="btn primary" type="button" data-act="startcheck">Prüfen</button><button class="btn quiet" type="button" data-act="snoozecheck">Später</button></div></section>`;
+}
+function openCheck() {
+  const c = checkCandidates();
+  UI.checked = UI.checked || { da: 0, leer: 0 };
+  if (!c.length) {
+    closeSheet();
+    const t = UI.checked; UI.checked = null;
+    toast('Geprüft: ' + t.da + ' noch da' + (t.leer ? ', ' + t.leer + ' leer oder futsch und auf der Liste' : '') + '.');
+    return;
+  }
+  const scroll = $('#sheet').hidden ? 0 : $('.sheet-card').scrollTop;
+  openSheet(`<h2>Noch da?</h2><p class="sub">Was leer oder futsch ist, kommt auf die Liste.</p>
+    <ul class="rows checklist">${c.map((s) => { const it = get('item', s.id); return `<li class="row">
+      <span class="name">${esc(it.name)}${stockState(s.id) === 'knapp' ? ' <span class="tag low">wird knapp</span>' : ''}</span>
+      <button class="stq" type="button" data-act="checkda" data-id="${esc(s.id)}">noch da</button>
+      <button class="stq warn" type="button" data-act="checkleer" data-id="${esc(s.id)}">leer oder futsch</button></li>`; }).join('')}</ul>
+    <div class="actions"><button class="btn quiet" type="button" data-act="endcheck">Fertig</button></div>`, 'check');
+  $('.sheet-card').scrollTop = scroll;
 }
 
 function renderOften() {
@@ -447,7 +486,10 @@ function renderOften() {
 function itemTags(item) {
   const s = get('stock', item.id), e = listOpen(item.id);
   let t = '';
-  if (s && s.qty > 0) t += `<span class="tag stock">${fmtAmt(s.qty, s.unit)} im Lager</span>`;
+  const st = s ? stockState(item.id) : null;
+  if (st === 'da') t += '<span class="tag stock">im Lager</span>';
+  else if (st === 'knapp') t += '<span class="tag low">wird knapp</span>';
+  else if (st === 'leer') t += '<span class="tag plain">leer oder futsch</span>';
   if (e) t += `<span class="tag list">${fmtAmt(e.qty, e.unit)} auf der Liste</span>`;
   return t ? `<span class="tags">${t}</span>` : '';
 }
@@ -461,7 +503,7 @@ function fundusRow(item) {
 function renderFundus() {
   const groups = {};
   items().sort(byName).forEach((i) => { const l = letterOf(i.name); (groups[l] = groups[l] || []).push(i); });
-  let h = '<p class="hint lead">Tippe auf einen Artikel und gib an, wie viel ins Lager oder auf die Liste soll.</p>';
+  let h = '<p class="hint lead">Tippe auf einen Artikel: auf die Liste setzen oder als „im Lager“ markieren.</p>';
   Object.keys(groups).sort().forEach((l) => {
     h += `<section class="group" id="L-${l}"><h2 class="ghead letter">${l}</h2><ul class="rows">${groups[l].map(fundusRow).join('')}</ul></section>`;
   });
@@ -470,27 +512,27 @@ function renderFundus() {
 }
 
 function stockRow(s, item) {
-  const low = isLow(s);
-  return `<li class="row stockrow${s.qty > 0 ? '' : ' gone'}">
-    <button class="main" type="button" data-act="stockedit" data-id="${esc(s.id)}"><span class="name">${esc(item.name)}${low ? ' <span class="tag low">knapp</span>' : ''}</span></button>
-    <div class="qtyctl">
-      <button class="pm" type="button" data-act="stockminus" data-id="${esc(s.id)}" aria-label="${esc(item.name)} weniger" ${s.qty > 0 ? '' : 'disabled'}>−</button>
-      <span class="amt">${fmtAmt(s.qty, s.unit)}</span>
-      <button class="pm" type="button" data-act="stockplus" data-id="${esc(s.id)}" aria-label="${esc(item.name)} mehr">+</button>
-    </div>
+  const st = stockState(s.id);
+  const empty = st === 'leer';
+  return `<li class="row stockrow${empty ? ' gone' : ''}">
+    <button class="main" type="button" data-act="stockedit" data-id="${esc(s.id)}"><span class="name">${esc(item.name)}${st === 'knapp' ? ' <span class="tag low">wird knapp</span>' : ''}</span></button>
+    ${empty
+      ? `<button class="stq" type="button" data-act="stockda" data-id="${esc(s.id)}" aria-label="${esc(item.name)} ist wieder da">wieder da</button>`
+      : `<button class="stq" type="button" data-act="stockempty" data-id="${esc(s.id)}" aria-label="${esc(item.name)} ist leer oder futsch">leer oder futsch</button>`}
   </li>`;
 }
 function renderLager() {
   const st = all('stock').filter((s) => get('item', s.id));
   if (!st.length) {
-    return `<div class="empty"><p class="big">Das Zitronenlager ist leer.</p><p>Tippe im Fundus auf einen Artikel und wähle „Ins Lager“. Nach jedem Einkauf landet das Eingekaufte automatisch hier.</p></div>`;
+    return `<div class="empty"><p class="big">Das Zitronenlager ist leer.</p><p>Nach jedem Einkauf landet das Eingekaufte automatisch hier. Oder tippe aufs Mikrofon und zähl auf, was da ist.</p></div>`;
   }
   const name = (s) => get('item', s.id);
-  const have = st.filter((s) => s.qty > 0).sort((a, b) => byName(name(a), name(b)));
-  const gone = st.filter((s) => !(s.qty > 0)).sort((a, b) => byName(name(a), name(b)));
+  const have = st.filter((s) => stockState(s.id) !== 'leer').sort((a, b) => byName(name(a), name(b)));
+  const gone = st.filter((s) => stockState(s.id) === 'leer').sort((a, b) => byName(name(a), name(b)));
   let h = '';
-  if (have.length) h += `<section class="group"><h2 class="ghead">Vorhanden<small>${have.length}</small></h2><ul class="rows">${have.map((s) => stockRow(s, name(s))).join('')}</ul></section>`;
-  if (gone.length) h += `<section class="group gonegroup"><h2 class="ghead">Aufgebraucht<small>${gone.length}</small></h2><ul class="rows">${gone.map((s) => stockRow(s, name(s))).join('')}</ul></section>`;
+  if (have.length) h += `<section class="group"><h2 class="ghead">Da<small>${have.length}</small></h2><ul class="rows">${have.map((s) => stockRow(s, name(s))).join('')}</ul></section>`;
+  if (gone.length) h += `<section class="group gonegroup"><h2 class="ghead">Leer oder futsch<small>${gone.length}</small></h2><ul class="rows">${gone.map((s) => stockRow(s, name(s))).join('')}</ul></section>`;
+  h += '<p class="hint">Grundzutaten wie Salz, Öl, Mehl und Gewürze gelten als da, bis ihr sie als „leer oder futsch“ markiert.</p>';
   return h;
 }
 
@@ -588,36 +630,37 @@ function openAmount(id) {
 function openAsk(id, preset = {}) {
   const item = get('item', id);
   if (!item) return;
-  const s = get('stock', id), e = listOpen(id);
+  const e = listOpen(id);
   const ctx = preset.forceList ? 'liste' : UI.tab;
-  const unit = preset.unit || (ctx === 'lager' && s ? s.unit : e ? e.unit : item.unit);
-  const status = [s && s.qty > 0 ? 'Im Lager: ' + fmtAmt(s.qty, s.unit) + '.' : 'Nicht im Lager.', e ? 'Auf der Liste: ' + fmtAmt(e.qty, e.unit) + '.' : ''].join(' ');
-  const toList = `<button class="btn ${ctx === 'lager' ? '' : 'primary'}" type="button" data-act="asklist" data-id="${esc(id)}">Auf die Liste</button>`;
-  const toStock = `<button class="btn ${ctx === 'lager' ? 'primary' : ''}" type="button" data-act="askstock" data-id="${esc(id)}">Ins Lager</button>`;
+  const unit = preset.unit || (e ? e.unit : item.unit);
+  if (ctx === 'lager') { openStock(id); return; }
+  const st = stockState(id);
+  const status = [st ? 'Im Lager: ' + STATE_LABEL[st] + '.' : 'Nicht im Lager.', e ? 'Auf der Liste: ' + fmtAmt(e.qty, e.unit) + '.' : ''].join(' ');
   openSheet(`<h2>${esc(item.name)}</h2><p class="sub">${esc(status)}</p>
-    <div class="field"><span>Wie viel?</span>${stepper(preset.qty > 0 ? preset.qty : null)}</div>
+    <div class="field"><span>Wie viel für die Liste?</span>${stepper(preset.qty > 0 ? preset.qty : null)}</div>
     <div class="field"><span>Einheit</span>${unitChips(unit)}</div>
     <p class="err" id="fErr" hidden></p>
-    <div class="actions two">${ctx === 'lager' ? toStock + toList : toList + toStock}</div>
+    <div class="actions two"><button class="btn primary" type="button" data-act="asklist" data-id="${esc(id)}">Auf die Liste</button>
+      <button class="btn" type="button" data-act="askstock" data-id="${esc(id)}">Ist im Lager</button></div>
     <div class="actions"><button class="btn quiet" type="button" data-act="edititem" data-id="${esc(id)}">Artikel bearbeiten</button></div>`, 'ask');
   const inp = $('#fQty'); if (inp) inp.focus();
 }
 
-// Lager-Eintrag: Bestand genau setzen, Mindestmenge, entfernen
+// Lager-Eintrag: Zustand wählen
 function openStock(id) {
-  const item = get('item', id), s = get('stock', id);
-  if (!item || !s) return;
-  openSheet(`<h2>${esc(item.name)}</h2><p class="sub">Im Zitronenlager</p>
-    <div class="field"><span>Bestand</span>${stepper(s.qty, true)}</div>
-    <div class="field"><span>Einheit</span>${unitChips(s.unit)}</div>
-    <label class="field"><span>Nachkaufen ab</span>
-      <input id="fMin" class="text short" inputmode="decimal" value="${esc(s.min > 0 ? fmtQty(s.min) : '')}" placeholder="aus" autocomplete="off"></label>
-    <p class="hint">Fällt der Bestand auf diese Menge oder darunter, kommt ${esc(item.name)} automatisch auf die Liste (${esc(fmtAmt(item.qty, item.unit))}). Leer lassen, wenn nicht gewünscht.</p>
-    <p class="err" id="fErr" hidden></p>
+  const item = get('item', id);
+  if (!item) return;
+  const s = get('stock', id), st = stockState(id), e = listOpen(id);
+  const days = s && s.at ? Math.floor((Date.now() - s.at) / 864e5) : null;
+  const since = days == null ? '' : days === 0 ? ', zuletzt heute bestätigt' : days === 1 ? ', zuletzt gestern bestätigt' : ', zuletzt vor ' + days + ' Tagen bestätigt';
+  const sub = st ? 'Im Zitronenlager: ' + STATE_LABEL[st] + since + '.' : isBasicItem(item) ? 'Grundzutat, gilt als da.' : 'Bisher nicht im Lager.';
+  const btn = (v, label) => `<button class="stbtn ${v}" type="button" data-act="setstate" data-id="${esc(id)}" data-v="${v}" aria-pressed="${st === v}">${label}</button>`;
+  openSheet(`<h2>${esc(item.name)}</h2><p class="sub">${esc(sub)}</p>
+    <div class="statepick">${btn('da', 'Da')}${btn('knapp', 'Wird knapp')}${btn('leer', 'Leer oder futsch')}</div>
+    <p class="hint">„Wird knapp“ und „Leer oder futsch“ setzen ${esc(item.name)} automatisch auf die Liste (${esc(fmtAmt(item.qty, item.unit))})${e ? ', dort steht es schon' : ''}.</p>
     <div class="actions">
-      <button class="btn primary" type="button" data-act="savestock" data-id="${esc(id)}">Speichern</button>
-      <button class="btn" type="button" data-act="asktolist" data-id="${esc(id)}">Auf die Liste setzen</button>
-      <button class="btn danger" type="button" data-act="unstock" data-id="${esc(id)}">Aus dem Lager entfernen</button>
+      <button class="btn" type="button" data-act="asktolist" data-id="${esc(id)}">Andere Menge auf die Liste</button>
+      ${s ? `<button class="btn danger" type="button" data-act="unstock" data-id="${esc(id)}">Aus dem Lager entfernen</button>` : ''}
       <button class="btn quiet" type="button" data-act="edititem" data-id="${esc(id)}">Artikel bearbeiten</button>
     </div>`, 'stock');
 }
@@ -780,7 +823,7 @@ function quickAdd() {
   if (exact) {
     const u = p.unit || exact.unit;
     if (p.qty && UI.tab === 'liste') { addToList(exact.id, p.qty, u); clearQuery(true); }
-    else if (p.qty && UI.tab === 'lager') { addToStock(exact.id, p.qty, u); clearQuery(true); }
+    else if (UI.tab === 'lager') { setState(exact.id, 'da'); clearQuery(true); }
     else openAsk(exact.id, p.qty ? { qty: p.qty, unit: u } : {});
     return;
   }
@@ -798,12 +841,13 @@ function clearQuery(keepFocus) {
 }
 
 function askDone(b, where) {
+  if (where === 'lager') { const fs = !!UI.q; closeSheet(); setState(b.dataset.id, 'da'); if (fs) clearQuery(true); return; }
   const q = readQty(), u = picked('unit');
   if (!(q > 0)) { showErr('Bitte eingeben, wie viel. Die Menge muss größer als null sein.'); const i = $('#fQty'); if (i) i.focus(); return; }
   if (!u) return showErr('Bitte eine Einheit wählen.');
   const fromSearch = !!UI.q;
   closeSheet();
-  if (where === 'liste') addToList(b.dataset.id, q, u); else addToStock(b.dataset.id, q, u);
+  addToList(b.dataset.id, q, u);
   if (fromSearch) clearQuery(true);
 }
 
@@ -818,19 +862,18 @@ const actions = {
   asklist: (b) => askDone(b, 'liste'),
   askstock: (b) => askDone(b, 'lager'),
   asktolist: (b) => openAsk(b.dataset.id, { forceList: true }),
-  stockplus: (b) => stepStock(b.dataset.id, 1),
-  stockminus: (b) => stepStock(b.dataset.id, -1),
   stockedit: (b) => openStock(b.dataset.id),
-  savestock: (b) => {
-    const raw = $('#fQty').value.trim();
-    const q = raw === '' ? 0 : parseNum(raw), u = picked('unit');
-    const mraw = $('#fMin').value.trim(), m = mraw === '' ? null : parseNum(mraw);
-    if (!(q >= 0)) return showErr('Bitte einen Bestand von null oder mehr eingeben.');
-    if (m !== null && !(m >= 0)) return showErr('„Nachkaufen ab“ bitte als Zahl eingeben oder leer lassen.');
-    if (!u) return showErr('Bitte eine Einheit wählen.');
-    closeSheet();
-    setStock(b.dataset.id, q, u, m);
+  startcheck: () => { UI.checked = { da: 0, leer: 0 }; openCheck(); },
+  snoozecheck: () => { S.checkSnooze = todayKey(); save(); render(); },
+  checkda: (b) => { confirmStock(b.dataset.id); UI.checked.da++; openCheck(); },
+  checkleer: (b) => { setState(b.dataset.id, 'leer', { silent: true }); UI.checked.leer++; openCheck(); },
+  endcheck: () => {
+    const t = UI.checked; UI.checked = null; closeSheet();
+    if (t && (t.da || t.leer)) toast('Geprüft: ' + t.da + ' noch da' + (t.leer ? ', ' + t.leer + ' leer oder futsch und auf der Liste' : '') + '.');
   },
+  stockempty: (b) => setState(b.dataset.id, 'leer'),
+  stockda: (b) => setState(b.dataset.id, 'da'),
+  setstate: (b) => { closeSheet(); setState(b.dataset.id, b.dataset.v); if (UI.q) clearQuery(false); },
   unstock: (b) => { closeSheet(); removeFromStock(b.dataset.id); },
   edititem: (b) => openItemEditor(b.dataset.id),
   newitem: () => openItemEditor(null, { cat: 'c-sonst' }),
