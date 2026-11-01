@@ -4,7 +4,7 @@
 
 const CFG = window.ZK_CONFIG || {};
 const UNITS = window.ZK_UNITS;
-const VERSION = '2.1';
+const VERSION = '2.2';
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const rid = (n = 12) => { const a = 'abcdefghijkmnopqrstuvwxyz23456789'; const b = crypto.getRandomValues(new Uint8Array(n)); return Array.from(b, (x) => a[x % a.length]).join(''); };
@@ -179,9 +179,9 @@ function addToList(itemId, a1, a2, a3) {
 function toggleList(itemId) { if (listOpen(itemId)) removeFromList(itemId); else addToList(itemId); }
 
 // ── Zitronenlager: Zustand statt Menge ──
-// Jeder Lager-Eintrag hat einen Zustand: 'da', 'knapp' (wird knapp) oder 'leer' (leer oder futsch).
+// Jeder Lager-Eintrag hat einen Zustand: 'da', 'knapp' (wird knapp) oder 'leer' (futsch).
 // „at“ ist die letzte Änderung oder Bestätigung. Alte Einträge mit Mengen werden beim Lesen umgedeutet.
-const STATE_LABEL = { da: 'da', knapp: 'wird knapp', leer: 'leer oder futsch' };
+const STATE_LABEL = { da: 'da', knapp: 'wird knapp', leer: 'futsch' };
 const BASIC_IDS = new Set(['i-salz', 'i-pfeffer', 'i-zucker', 'i-olivenoel', 'i-rapsoel', 'i-mehl']);
 const isBasicItem = (it) => !!it && (BASIC_IDS.has(it.id) || catOf(it) === 'c-gewuerze');
 function stockState(id) {
@@ -190,14 +190,14 @@ function stockState(id) {
   if (s.state) return s.state;
   return s.qty > 0 ? 'da' : 'leer';
 }
-// Vorhanden heißt: da oder wird knapp; Grundzutaten gelten als da, solange niemand „leer oder futsch“ sagt
+// Vorhanden heißt: da oder wird knapp; Grundzutaten gelten als da, solange niemand „futsch“ sagt
 function inStock(id) {
   const st = stockState(id);
   if (st) return st === 'da' || st === 'knapp';
   return isBasicItem(get('item', id));
 }
 const isLow = (s) => !!s && (s.state === 'knapp' || (!s.state && s.min > 0 && s.qty <= s.min));
-// Zustand setzen. „Wird knapp“ und „leer oder futsch“ setzen den Artikel automatisch auf die Liste.
+// Zustand setzen. „Wird knapp“ und „futsch“ setzen den Artikel automatisch auf die Liste.
 function setState(itemId, state, opts = {}) {
   const item = get('item', itemId);
   if (!item) return null;
@@ -208,7 +208,7 @@ function setState(itemId, state, opts = {}) {
   });
   if (!opts.silent) {
     const msg = state === 'da' ? item.name + ' ist im Lager'
-      : item.name + (state === 'knapp' ? ' wird knapp' : ' ist leer oder futsch') + (toList ? ' und steht jetzt auf der Liste' : ', steht schon auf der Liste');
+      : item.name + (state === 'knapp' ? ' wird knapp' : ' ist futsch') + (toList ? ' und steht jetzt auf der Liste' : ', steht schon auf der Liste');
     toast(msg, undo);
   }
   return undo;
@@ -411,7 +411,7 @@ function groupByCat(rows, itemOf) {
 function listRow(e, item) {
   return `<li class="row${e.checked ? ' done' : ''}">
     <button class="check" type="button" data-act="check" data-id="${esc(e.id)}" aria-label="${esc(item.name)} ${e.checked ? 'wieder offen' : 'abhaken'}" aria-pressed="${e.checked}">${SLICE}</button>
-    <button class="main" type="button" data-act="listitem" data-id="${esc(e.id)}"><span class="name">${esc(item.name)}${e.checked ? '' : stockState(e.id) === 'leer' ? ' <span class="tag plain">leer oder futsch</span>' : stockState(e.id) === 'knapp' ? ' <span class="tag low">wird knapp</span>' : ''}</span></button>
+    <button class="main" type="button" data-act="listitem" data-id="${esc(e.id)}"><span class="name">${esc(item.name)}${e.checked ? '' : stockState(e.id) === 'leer' ? ' <span class="tag plain">futsch</span>' : stockState(e.id) === 'knapp' ? ' <span class="tag low">wird knapp</span>' : ''}</span></button>
   </li>`;
 }
 
@@ -462,15 +462,15 @@ function openCheck() {
   if (!c.length) {
     closeSheet();
     const t = UI.checked; UI.checked = null;
-    toast('Geprüft: ' + t.da + ' noch da' + (t.leer ? ', ' + t.leer + ' leer oder futsch und auf der Liste' : '') + '.');
+    toast('Geprüft: ' + t.da + ' noch da' + (t.leer ? ', ' + t.leer + ' futsch und auf der Liste' : '') + '.');
     return;
   }
   const scroll = $('#sheet').hidden ? 0 : $('.sheet-card').scrollTop;
-  openSheet(`<h2>Noch da?</h2><p class="sub">Was leer oder futsch ist, kommt auf die Liste.</p>
+  openSheet(`<h2>Noch da?</h2><p class="sub">Was futsch ist, kommt auf die Liste.</p>
     <ul class="rows checklist">${c.map((s) => { const it = get('item', s.id); return `<li class="row">
       <span class="name">${esc(it.name)}${stockState(s.id) === 'knapp' ? ' <span class="tag low">wird knapp</span>' : ''}</span>
       <button class="stq" type="button" data-act="checkda" data-id="${esc(s.id)}">noch da</button>
-      <button class="stq warn" type="button" data-act="checkleer" data-id="${esc(s.id)}">leer oder futsch</button></li>`; }).join('')}</ul>
+      <button class="stq warn" type="button" data-act="checkleer" data-id="${esc(s.id)}">futsch</button></li>`; }).join('')}</ul>
     <div class="actions"><button class="btn quiet" type="button" data-act="endcheck">Fertig</button></div>`, 'check');
   $('.sheet-card').scrollTop = scroll;
 }
@@ -486,7 +486,7 @@ function renderOften() {
 
 function itemTags(item) {
   const st = stockState(item.id);
-  const t = st === 'knapp' ? '<span class="tag low">wird knapp</span>' : st === 'leer' ? '<span class="tag plain">leer oder futsch</span>' : '';
+  const t = st === 'knapp' ? '<span class="tag low">wird knapp</span>' : st === 'leer' ? '<span class="tag plain">futsch</span>' : '';
   return t ? `<span class="tags">${t}</span>` : '';
 }
 function fundusRow(item) {
@@ -517,7 +517,7 @@ function stockRow(s, item) {
     <button class="main" type="button" data-act="stockedit" data-id="${esc(s.id)}"><span class="name">${esc(item.name)}${st === 'knapp' ? ' <span class="tag low">wird knapp</span>' : ''}</span></button>
     ${empty
       ? `<button class="stq" type="button" data-act="stockda" data-id="${esc(s.id)}" aria-label="${esc(item.name)} ist wieder da">wieder da</button>`
-      : `<button class="stq" type="button" data-act="stockempty" data-id="${esc(s.id)}" aria-label="${esc(item.name)} ist leer oder futsch">leer oder futsch</button>`}
+      : `<button class="stq" type="button" data-act="stockempty" data-id="${esc(s.id)}" aria-label="${esc(item.name)} ist futsch">futsch</button>`}
   </li>`;
 }
 function renderLager() {
@@ -530,8 +530,8 @@ function renderLager() {
   const gone = st.filter((s) => stockState(s.id) === 'leer').sort((a, b) => byName(name(a), name(b)));
   let h = '';
   if (have.length) h += `<section class="group"><h2 class="ghead">Da<small>${have.length}</small></h2><ul class="rows">${have.map((s) => stockRow(s, name(s))).join('')}</ul></section>`;
-  if (gone.length) h += `<section class="group gonegroup"><h2 class="ghead">Leer oder futsch<small>${gone.length}</small></h2><ul class="rows">${gone.map((s) => stockRow(s, name(s))).join('')}</ul></section>`;
-  h += '<p class="hint">Grundzutaten wie Salz, Öl, Mehl und Gewürze gelten als da, bis ihr sie als „leer oder futsch“ markiert.</p>';
+  if (gone.length) h += `<section class="group gonegroup"><h2 class="ghead">Futsch<small>${gone.length}</small></h2><ul class="rows">${gone.map((s) => stockRow(s, name(s))).join('')}</ul></section>`;
+  h += '<p class="hint">Grundzutaten wie Salz, Öl, Mehl und Gewürze gelten als da, bis ihr sie als „futsch“ markiert.</p>';
   return h;
 }
 
@@ -638,8 +638,8 @@ function openStock(id) {
   const sub = st ? 'Im Zitronenlager: ' + STATE_LABEL[st] + since + '.' : isBasicItem(item) ? 'Grundzutat, gilt als da.' : 'Bisher nicht im Lager.';
   const btn = (v, label) => `<button class="stbtn ${v}" type="button" data-act="setstate" data-id="${esc(id)}" data-v="${v}" aria-pressed="${st === v}">${label}</button>`;
   openSheet(`<h2>${esc(item.name)}</h2><p class="sub">${esc(sub)}</p>
-    <div class="statepick">${btn('da', 'Da')}${btn('knapp', 'Wird knapp')}${btn('leer', 'Leer oder futsch')}</div>
-    <p class="hint">„Wird knapp“ und „Leer oder futsch“ setzen ${esc(item.name)} automatisch auf die Liste${e ? ', dort steht es schon' : ''}.</p>
+    <div class="statepick">${btn('da', 'Da')}${btn('knapp', 'Wird knapp')}${btn('leer', 'Futsch')}</div>
+    <p class="hint">„Wird knapp“ und „Futsch“ setzen ${esc(item.name)} automatisch auf die Liste${e ? ', dort steht es schon' : ''}.</p>
     <div class="actions">
       ${e ? '' : `<button class="btn" type="button" data-act="addlist" data-id="${esc(id)}">Auf die Liste setzen</button>`}
       ${s ? `<button class="btn danger" type="button" data-act="unstock" data-id="${esc(id)}">Aus dem Lager entfernen</button>` : ''}
@@ -835,7 +835,7 @@ const actions = {
   checkleer: (b) => { setState(b.dataset.id, 'leer', { silent: true }); UI.checked.leer++; openCheck(); },
   endcheck: () => {
     const t = UI.checked; UI.checked = null; closeSheet();
-    if (t && (t.da || t.leer)) toast('Geprüft: ' + t.da + ' noch da' + (t.leer ? ', ' + t.leer + ' leer oder futsch und auf der Liste' : '') + '.');
+    if (t && (t.da || t.leer)) toast('Geprüft: ' + t.da + ' noch da' + (t.leer ? ', ' + t.leer + ' futsch und auf der Liste' : '') + '.');
   },
   stockempty: (b) => setState(b.dataset.id, 'leer'),
   stockda: (b) => setState(b.dataset.id, 'da'),

@@ -210,7 +210,7 @@ function renderVoicePreview() {
     if (!idx.length) return '';
     return `<section class="group vgroup"><h3 class="ghead">${title}<small>${idx.length}</small></h3><ul class="rows">${idx.map(([r, i]) => {
       const it = r.itemId ? get('item', r.itemId) : null;
-      const tags = (r.isNew ? `<span class="tag list">neu: ${esc(catName(guessCat(r.name)))}</span>` : '') + (r.empty ? '<span class="tag low">leer oder futsch</span>' : r.low ? '<span class="tag low">wird knapp</span>' : '');
+      const tags = (r.isNew ? `<span class="tag list">neu: ${esc(catName(guessCat(r.name)))}</span>` : '') + (r.empty ? '<span class="tag low">futsch</span>' : r.low ? '<span class="tag low">wird knapp</span>' : '');
       return `<li class="row vrow">
         <span class="stack"><input class="vname" data-i="${i}" value="${esc(r.name)}" list="fundusNames" aria-label="Artikel" autocomplete="off" autocapitalize="sentences" enterkeyhint="done">${tags ? '<span class="tags">' + tags + '</span>' : ''}</span>
         ${target === 'lager' ? '<span class="vstate">ist da</span>' : ''}

@@ -5,11 +5,11 @@ Gemeinsame Einkaufsliste von Hanne und Andi. Schwesterprojekt der [Zitronenpress
 - **App:** https://andi-apfel.github.io/zitronenkorb/ (aufs iPhone per Safari „Teilen → Zum Home-Bildschirm“)
 - **Einkaufsliste:** welche Artikel zu besorgen sind (ohne Mengen), nach Laufweg sortiert, Abhaken in den Korb.
   „Einkauf abschließen“ bucht alles Abgehakte ins Zitronenlager.
-- **Zitronenlager:** kennt keine Mengen, nur Zustände: **da**, **wird knapp**, **leer oder futsch**. „Einkauf abschließen“ setzt
-  alles Eingekaufte auf da. Ein Tipp auf „leer oder futsch“ (oder „wird knapp“) setzt den Artikel automatisch auf die Liste.
-  Grundzutaten (Salz, Pfeffer, Zucker, Mehl, Öl, Gewürze) gelten als da, bis jemand „leer oder futsch“ sagt.
-  Nach „Gekocht“ fragt die App, ob etwas leer oder futsch geworden ist. **Check vorm Einkauf:** Was 7 Tage niemand bestätigt
-  hat, bietet die Liste kurz zum Prüfen an (noch da / leer oder futsch).
+- **Zitronenlager:** kennt keine Mengen, nur Zustände: **da**, **wird knapp**, **futsch**. „Einkauf abschließen“ setzt
+  alles Eingekaufte auf da. Ein Tipp auf „futsch“ (oder „wird knapp“) setzt den Artikel automatisch auf die Liste.
+  Grundzutaten (Salz, Pfeffer, Zucker, Mehl, Öl, Gewürze) gelten als da, bis jemand „futsch“ sagt.
+  Nach „Gekocht“ fragt die App, ob etwas futsch gegangen ist. **Check vorm Einkauf:** Was 7 Tage niemand bestätigt
+  hat, bietet die Liste kurz zum Prüfen an (noch da / futsch).
 - **Fundus:** alle bekannten Artikel alphabetisch als Schnellauswahl, je Artikel die Schalter „Liste“ und „Lager“.
 - **Rezepte:** Zutaten Zeile für Zeile eintippen oder einfügen („500 g Spaghetti“, „½ TL Salz“, „2 Zehen Knoblauch“),
   die App ordnet sie dem Fundus zu und warnt bei vermutlich nicht vegetarischen Zutaten. Portionen umrechnen,
@@ -23,7 +23,7 @@ Gemeinsame Einkaufsliste von Hanne und Andi. Schwesterprojekt der [Zitronenpress
   und frischen Zutaten, die verbraucht werden; kürzlich Gekochtes rückt nach hinten. Ideen lassen sich übernehmen.
 - **Wochenplan:** Rezepte auf Tage legen, „Fehlendes für die Woche auf die Liste“ fasst alles zusammen.
 - **Sprache:** Mikrofon im Suchfeld. Frei sprechen oder diktieren („Im Lager haben wir zwei Liter Milch, wir brauchen
-  Butter, die Haferflocken sind alle“); Vorschau mit Ziel je Eintrag, Namen korrigierbar, keine Mengen. „Ist leer/futsch“ und „wird knapp“ setzen den Zustand und die Liste.
+  Butter, die Haferflocken sind alle“); Vorschau mit Ziel je Eintrag, Namen korrigierbar, keine Mengen. „ist leer“, „ist futsch“, „sind alle“ und „wird knapp“ setzen den Zustand und die Liste.
 - Rückgängig, Live-Abgleich zwischen beiden Handys, offline nutzbar.
 - **Dateien:** `index.html` (Gerüst), `app.css` (Gestaltung), `app.js` (Logik und Abgleich), `recipes.js` (Rezepte und Wochenplan), `catalog.js` (Rezeptideen und Vorschläge), `import.js` (Rezept-Import), `voice.js` (Spracherfassung), `seed.js` (Startkategorien und
   vegetarischer Grundfundus), `config.js` (öffentliche Supabase-Adresse), `sw.js` (Offline-Speicher).

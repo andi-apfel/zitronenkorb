@@ -124,7 +124,7 @@ function recipeSummary(r) {
   return { miss, total: st.length };
 }
 
-// ── Kochen: Mahlzeit abhaken und fragen, ob etwas leer oder futsch geworden ist ──
+// ── Kochen: Mahlzeit abhaken und fragen, ob etwas futsch gegangen ist ──
 function cook(recipeId, serv, date, idx) {
   const r = get('recipe', recipeId);
   if (!r) return;
@@ -142,7 +142,7 @@ function cook(recipeId, serv, date, idx) {
   UI.cookPick = new Set();
   if (!used.length) { toast('Guten Appetit!'); return; }
   openSheet(`<h2>Guten Appetit!</h2>
-    <p class="sub">Ist beim Kochen etwas leer oder futsch geworden? Tippe es an, dann kommt es auf die Liste.</p>
+    <p class="sub">Ist beim Kochen etwas futsch gegangen? Tippe es an, dann kommt es auf die Liste.</p>
     <div class="chips cookpick">${used.map((it) => `<button class="chip" type="button" data-act="cooktoggle" data-id="${esc(it.id)}" aria-pressed="false">${esc(it.name)}</button>`).join('')}</div>
     <div class="actions"><button class="btn primary" type="button" data-act="cookdone" id="cookGo">Nein, alles noch da</button></div>`, 'cooked');
 }
@@ -237,7 +237,7 @@ function renderRecipeSearch() {
 function statusTag(x) {
   if (x.state === 'have') return x.have.basic ? '<span class="tag stock">Grundzutat, da</span>' : x.have.state === 'knapp' ? '<span class="tag low">da, wird knapp</span>' : '<span class="tag stock">im Lager</span>';
   if (x.covered) return `<span class="tag list">steht auf der Liste</span>`;
-  return stockState(x.item) === 'leer' ? '<span class="tag list">leer oder futsch</span>' : '<span class="tag list">fehlt</span>';
+  return stockState(x.item) === 'leer' ? '<span class="tag list">futsch</span>' : '<span class="tag list">fehlt</span>';
 }
 function openRecipe(id, opts = {}) {
   const r = get('recipe', id);
@@ -400,7 +400,7 @@ Object.assign(actions, {
     b.setAttribute('aria-pressed', String(on));
     if (on) UI.cookPick.add(b.dataset.id); else UI.cookPick.delete(b.dataset.id);
     const n = UI.cookPick.size, go = $('#cookGo');
-    if (go) go.textContent = n ? n + (n === 1 ? ' Sache ist leer oder futsch' : ' Sachen sind leer oder futsch') : 'Nein, alles noch da';
+    if (go) go.textContent = n ? n + (n === 1 ? ' Sache ist futsch' : ' Sachen sind futsch') : 'Nein, alles noch da';
   },
   cookdone: () => {
     const ids = [...(UI.cookPick || [])];
