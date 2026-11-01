@@ -129,11 +129,11 @@ function applyVoice(rows) {
     for (const r of rows) {
       let it = r.itemId ? get('item', r.itemId) : matchSpoken(r.name);
       if (!it) {
-        it = { id: 'u-' + rid(10), name: r.name, cat: guessCat(r.name), qty: r.qty && PURCHASE.has(r.unit) ? r.qty : 1, unit: r.qty && PURCHASE.has(r.unit) ? r.unit : 'Stk', uses: 0, created: Date.now() };
+        it = { id: 'u-' + rid(10), name: r.name, cat: guessCat(r.name), qty: 1, unit: 'Stk', uses: 0, created: Date.now() };
         put('item', it); created++;
       }
       if (r.target === 'liste') {
-        addToList(it.id, r.qty || it.qty, r.qty ? r.unit : it.unit, { silent: true });
+        addToList(it.id, { silent: true });
         if (r.empty) setState(it.id, 'leer', { silent: true });
         else if (r.low) setState(it.id, 'knapp', { silent: true });
         nList++;
@@ -165,7 +165,7 @@ function openVoice() {
     <p class="sub vsub">Gilt für alles, wozu du nichts sagst. „Haben wir“ geht ins Lager, „brauchen wir“ auf die Liste. „Ist leer“, „ist futsch“ oder „wird knapp“ kommt auf die Liste und wird im Lager so markiert.</p>
     <label class="field vlabel" for="vText"><span>Erkannter Text, hier kannst du jederzeit korrigieren</span></label>
     <div class="vbox">
-      <textarea id="vText" class="text area" rows="4" placeholder="z. B.: Im Lager haben wir zwei Liter Milch, sechs Eier und ein Kilo Mehl. Wir brauchen Butter, Zitronen und Spülmittel."></textarea>
+      <textarea id="vText" class="text area" rows="4" placeholder="z. B.: Im Lager haben wir Milch, Eier und Mehl. Wir brauchen Butter, Zitronen und Spülmittel. Der Salat ist futsch."></textarea>
       ${SR ? `<button class="micbig" type="button" data-act="vlisten" id="vMic">${MIC}<span>Zuhören</span></button>` : ''}
     </div>
     <p class="hint" id="vHint">${SR ? 'Tippe auf „Zuhören“ und sprich. Alternativ ins Feld tippen und das Mikrofon der Tastatur nutzen.' : 'Tippe ins Feld und nutze das Mikrofon unten auf der Tastatur zum Diktieren.'}</p>
@@ -210,17 +210,16 @@ function renderVoicePreview() {
     if (!idx.length) return '';
     return `<section class="group vgroup"><h3 class="ghead">${title}<small>${idx.length}</small></h3><ul class="rows">${idx.map(([r, i]) => {
       const it = r.itemId ? get('item', r.itemId) : null;
-      const ph = it ? fmtQty(it.qty) + ' ' + it.unit : '1 Stk';
       const tags = (r.isNew ? `<span class="tag list">neu: ${esc(catName(guessCat(r.name)))}</span>` : '') + (r.empty ? '<span class="tag low">leer oder futsch</span>' : r.low ? '<span class="tag low">wird knapp</span>' : '');
       return `<li class="row vrow">
         <span class="stack"><input class="vname" data-i="${i}" value="${esc(r.name)}" list="fundusNames" aria-label="Artikel" autocomplete="off" autocapitalize="sentences" enterkeyhint="done">${tags ? '<span class="tags">' + tags + '</span>' : ''}</span>
-        ${target === 'liste' ? `<input class="vamt" data-i="${i}" value="${r.qty ? esc(fmtQty(r.qty) + ' ' + r.unit) : ''}" placeholder="${esc(ph)}" aria-label="Menge für ${esc(r.name)}" autocomplete="off">` : '<span class="vstate">ist da</span>'}
+        ${target === 'lager' ? '<span class="vstate">ist da</span>' : ''}
         <button class="vmove" type="button" data-act="vtoggle" data-i="${i}" aria-label="${esc(r.name)} ${target === 'liste' ? 'stattdessen ins Lager' : 'stattdessen auf die Liste'}">${target === 'liste' ? 'Lager' : 'Liste'}</button>
         <button class="vx" type="button" data-act="vdel" data-i="${i}" aria-label="${esc(r.name)} entfernen">×</button>
       </li>`;
     }).join('')}</ul></section>`;
   };
-  box.innerHTML = rows.length ? '<p class="hint">Falsch verstanden? Tippe auf einen Namen oder eine Menge und ändere sie. Graue Mengen gelten, wenn du nichts einträgst.</p>' + group('liste', 'Auf die Liste') + group('lager', 'Ins Lager') : '';
+  box.innerHTML = rows.length ? '<p class="hint">Falsch verstanden? Tippe auf einen Namen und ändere ihn.</p>' + group('liste', 'Auf die Liste') + group('lager', 'Ins Lager') : '';
   const go = $('#vGo');
   if (go) { go.disabled = !rows.length; go.textContent = rows.length ? rows.length + (rows.length === 1 ? ' Eintrag übernehmen' : ' Einträge übernehmen') : 'Nichts erkannt'; }
 }
@@ -292,7 +291,6 @@ Object.assign(actions, {
   vdel: (b) => { const r = UI.voice.rows[Number(b.dataset.i)]; if (r) overOf(r).deleted = true; UI.voice.rows.splice(Number(b.dataset.i), 1); renderVoicePreview(); },
   vclose: () => { stopListening(); closeSheet(); },
   vgo: () => {
-    if (document.querySelector('#vPrev .vamt.bad')) return showErr('Eine Menge ist nicht lesbar. Bitte so schreiben: „2 l“ oder „500 g“, oder das Feld leer lassen.');
     const rows = UI.voice.rows.slice();
     if (!rows.length) return;
     stopListening(); closeSheet();

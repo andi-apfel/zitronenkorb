@@ -4,7 +4,7 @@
 
 const CFG = window.ZK_CONFIG || {};
 const UNITS = window.ZK_UNITS;
-const VERSION = '2.0';
+const VERSION = '2.1';
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const rid = (n = 12) => { const a = 'abcdefghijkmnopqrstuvwxyz23456789'; const b = crypto.getRandomValues(new Uint8Array(n)); return Array.from(b, (x) => a[x % a.length]).join(''); };
@@ -164,18 +164,19 @@ function sumInto(cur, q, u) {
 }
 const listOpen = (id) => { const e = get('list', id); return e && !e.checked ? e : null; };
 
-// Auf die Liste: Steht der Artikel schon drauf, wird die Menge dazugezählt.
-function addToList(itemId, qty, unit, opts = {}) {
+// Auf die Liste (nur der Artikel, ohne Menge). Alte Aufrufe mit Menge/Einheit werden toleriert.
+function addToList(itemId, a1, a2, a3) {
+  const opts = a1 && typeof a1 === 'object' ? a1 : (a3 || {});
   const item = get('item', itemId);
-  if (!item || !(qty > 0)) return;
-  const open = listOpen(itemId);
-  const next = sumInto(open, qty, unit || item.unit);
+  if (!item) return;
+  if (listOpen(itemId)) { if (!opts.silent) toast(item.name + ' steht schon auf der Liste'); return; }
   const undo = tx(() => {
-    put('list', { id: itemId, qty: next.qty, unit: next.unit, checked: false, at: Date.now() });
-    if (!open) put('item', Object.assign({}, item, { uses: (item.uses || 0) + 1, last: Date.now() }));
+    put('list', { id: itemId, checked: false, at: Date.now() });
+    put('item', Object.assign({}, item, { uses: (item.uses || 0) + 1, last: Date.now() }));
   });
-  if (!opts.silent) toast(open ? item.name + ': jetzt ' + fmtAmt(next.qty, next.unit) + ' auf der Liste' : item.name + ' (' + fmtAmt(next.qty, next.unit) + ') steht auf der Liste', undo);
+  if (!opts.silent) toast(item.name + ' steht auf der Liste', undo);
 }
+function toggleList(itemId) { if (listOpen(itemId)) removeFromList(itemId); else addToList(itemId); }
 
 // ── Zitronenlager: Zustand statt Menge ──
 // Jeder Lager-Eintrag hat einen Zustand: 'da', 'knapp' (wird knapp) oder 'leer' (leer oder futsch).
@@ -203,7 +204,7 @@ function setState(itemId, state, opts = {}) {
   const toList = (state === 'knapp' || state === 'leer') && !listOpen(itemId);
   const undo = tx(() => {
     put('stock', { id: itemId, state, at: Date.now() });
-    if (toList) put('list', { id: itemId, qty: item.qty, unit: item.unit, checked: false, at: Date.now(), auto: true });
+    if (toList) put('list', { id: itemId, checked: false, at: Date.now(), auto: true });
   });
   if (!opts.silent) {
     const msg = state === 'da' ? item.name + ' ist im Lager'
@@ -238,7 +239,7 @@ function finishTrip() {
   const done = entries().filter((e) => e.checked);
   if (!done.length) return;
   const undo = tx(() => {
-    put('trip', { id: 't-' + rid(10), at: Date.now(), items: done.map((e) => ({ item: e.id, qty: e.qty, unit: e.unit })) });
+    put('trip', { id: 't-' + rid(10), at: Date.now(), items: done.map((e) => ({ item: e.id })) });
     done.forEach((e) => {
       put('stock', { id: e.id, state: 'da', at: Date.now() });
       del('list', e.id);
@@ -382,7 +383,7 @@ const SLICE = '<svg class="slice" viewBox="0 0 28 28" aria-hidden="true"><circle
 const PENCIL = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z"/></svg>';
 const PLUS = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>';
 
-const TAB_PH = { liste: 'Was fehlt? z. B. 2 l Milch', lager: 'Im Lager suchen oder ergänzen', fundus: 'Im Fundus suchen' };
+const TAB_PH = { liste: 'Was fehlt? z. B. Milch', lager: 'Im Lager suchen oder ergänzen', fundus: 'Im Fundus suchen' };
 const VIEWS = { liste: () => renderList(), lager: () => renderLager(), fundus: () => renderFundus() };
 function render() {
   if (!VIEWS[UI.tab]) UI.tab = 'liste';
@@ -410,7 +411,7 @@ function groupByCat(rows, itemOf) {
 function listRow(e, item) {
   return `<li class="row${e.checked ? ' done' : ''}">
     <button class="check" type="button" data-act="check" data-id="${esc(e.id)}" aria-label="${esc(item.name)} ${e.checked ? 'wieder offen' : 'abhaken'}" aria-pressed="${e.checked}">${SLICE}</button>
-    <button class="main" type="button" data-act="amount" data-id="${esc(e.id)}"><span class="name">${esc(item.name)}${e.checked ? '' : stockState(e.id) === 'leer' ? ' <span class="tag plain">leer oder futsch</span>' : stockState(e.id) === 'knapp' ? ' <span class="tag low">wird knapp</span>' : ''}</span><span class="amt">${fmtAmt(e.qty, e.unit)}</span></button>
+    <button class="main" type="button" data-act="listitem" data-id="${esc(e.id)}"><span class="name">${esc(item.name)}${e.checked ? '' : stockState(e.id) === 'leer' ? ' <span class="tag plain">leer oder futsch</span>' : stockState(e.id) === 'knapp' ? ' <span class="tag low">wird knapp</span>' : ''}</span></button>
   </li>`;
 }
 
@@ -480,22 +481,20 @@ function renderOften() {
     .sort((a, b) => (b.uses || 0) - (a.uses || 0) || (b.last || 0) - (a.last || 0)).slice(0, 10);
   if (!often.length) return '';
   return `<section class="often"><h2>Oft gekauft</h2><div class="chips">${often.map((i) =>
-    `<button class="chip" type="button" data-act="ask" data-id="${esc(i.id)}">${PLUS}${esc(i.name)}</button>`).join('')}</div></section>`;
+    `<button class="chip" type="button" data-act="addlist" data-id="${esc(i.id)}">${PLUS}${esc(i.name)}</button>`).join('')}</div></section>`;
 }
 
 function itemTags(item) {
-  const s = get('stock', item.id), e = listOpen(item.id);
-  let t = '';
-  const st = s ? stockState(item.id) : null;
-  if (st === 'da') t += '<span class="tag stock">im Lager</span>';
-  else if (st === 'knapp') t += '<span class="tag low">wird knapp</span>';
-  else if (st === 'leer') t += '<span class="tag plain">leer oder futsch</span>';
-  if (e) t += `<span class="tag list">${fmtAmt(e.qty, e.unit)} auf der Liste</span>`;
+  const st = stockState(item.id);
+  const t = st === 'knapp' ? '<span class="tag low">wird knapp</span>' : st === 'leer' ? '<span class="tag plain">leer oder futsch</span>' : '';
   return t ? `<span class="tags">${t}</span>` : '';
 }
 function fundusRow(item) {
-  return `<li class="row">
-    <button class="main" type="button" data-act="ask" data-id="${esc(item.id)}"><span class="stack"><span class="name">${esc(item.name)}</span>${itemTags(item)}</span></button>
+  const onList = !!listOpen(item.id), inLager = inStock(item.id) && !!get('stock', item.id);
+  return `<li class="row fundrow">
+    <button class="main" type="button" data-act="${UI.tab === 'lager' ? 'stockedit' : 'togglelist'}" data-id="${esc(item.id)}"><span class="stack"><span class="name">${esc(item.name)}</span>${itemTags(item)}</span></button>
+    <button class="tgl" type="button" data-act="togglelist" data-id="${esc(item.id)}" aria-pressed="${onList}" aria-label="${esc(item.name)} ${onList ? 'von der Liste nehmen' : 'auf die Liste'}">Liste</button>
+    <button class="tgl" type="button" data-act="togglestock" data-id="${esc(item.id)}" aria-pressed="${inLager}" aria-label="${esc(item.name)} ${inLager ? 'im Lager: Zustand ändern' : 'ist im Lager'}">Lager</button>
     <button class="edit" type="button" data-act="edititem" data-id="${esc(item.id)}" aria-label="${esc(item.name)} bearbeiten">${PENCIL}</button>
   </li>`;
 }
@@ -503,7 +502,7 @@ function fundusRow(item) {
 function renderFundus() {
   const groups = {};
   items().sort(byName).forEach((i) => { const l = letterOf(i.name); (groups[l] = groups[l] || []).push(i); });
-  let h = '<p class="hint lead">Tippe auf einen Artikel: auf die Liste setzen oder als „im Lager“ markieren.</p>';
+  let h = '<p class="hint lead">„Liste“ setzt einen Artikel auf die Einkaufsliste, „Lager“ markiert ihn als vorhanden.</p>';
   Object.keys(groups).sort().forEach((l) => {
     h += `<section class="group" id="L-${l}"><h2 class="ghead letter">${l}</h2><ul class="rows">${groups[l].map(fundusRow).join('')}</ul></section>`;
   });
@@ -544,12 +543,11 @@ function renderSearch() {
   const target = UI.tab === 'lager' ? 'ins Lager' : 'auf die Liste';
   let h = '';
   if (UI.tab !== 'fundus' && exact) {
-    h += `<p class="hint lead">${p.qty ? 'Mit „Fertig“ auf der Tastatur kommen ' + esc(fmtAmt(p.qty, p.unit || exact.unit)) + ' ' + esc(exact.name) + ' direkt ' + target + '.' : 'Mit „Fertig“ fragt die App, wie viel ' + esc(exact.name) + ' ' + target + ' soll.'}</p>`;
+    h += `<p class="hint lead">Mit „Fertig“ auf der Tastatur kommt ${esc(exact.name)} ${target}.</p>`;
   }
   if (hits.length) h += `<section class="group"><h2 class="ghead">Im Fundus<small>${hits.length}</small></h2><ul class="rows">${hits.map(fundusRow).join('')}</ul></section>`;
   if (p.name && !exact) {
-    const amt = p.qty ? fmtAmt(p.qty, p.unit || 'Stk') : null;
-    h += `<button class="create" type="button" data-act="createfromq"><b>„${esc(p.name)}“ neu anlegen</b><span>Vorschlag: ${esc(catName(guessCat(p.name)))}${amt ? ', ' + esc(amt) : ''}. Kommt in den Fundus, danach fragt die App, wohin.</span></button>`;
+    h += `<button class="create" type="button" data-act="createfromq"><b>„${esc(p.name)}“ neu anlegen</b><span>Vorschlag: ${esc(catName(guessCat(p.name)))}. Kommt in den Fundus${UI.tab === 'liste' ? ' und auf die Liste' : UI.tab === 'lager' ? ' und ins Lager' : ''}.</span></button>`;
   }
   return h;
 }
@@ -611,39 +609,23 @@ function stepper(qty, allowZero) {
 }
 const picked = (group) => { const b = document.querySelector(`#sheet [data-group="${group}"][aria-pressed="true"]`); return b ? b.dataset.v : null; };
 
-function openAmount(id) {
-  const e = get('list', id), item = get('item', id);
-  if (!item) return;
-  const q = e ? e.qty : item.qty, u = e ? e.unit : item.unit;
-  openSheet(`<h2>${esc(item.name)}</h2><p class="sub">${esc(catName(catOf(item)))}</p>
-    <div class="field"><span>Menge</span>${stepper(q)}</div>
-    <div class="field"><span>Einheit</span>${unitChips(u)}</div>
-    <p class="err" id="fErr" hidden></p>
-    <div class="actions">
-      <button class="btn primary" type="button" data-act="saveamount" data-id="${esc(id)}">${e && !e.checked ? 'Menge übernehmen' : 'Auf die Liste'}</button>
-      ${e ? `<button class="btn" type="button" data-act="unlist" data-id="${esc(id)}">Von der Liste nehmen</button>` : ''}
-      <button class="btn quiet" type="button" data-act="edititem" data-id="${esc(id)}">Artikel bearbeiten</button>
-    </div>`, 'amount');
-}
-
-// „Wie viel?“ – aus Fundus, Suche oder „Oft gekauft“: Menge eingeben, dann ins Lager oder auf die Liste
-function openAsk(id, preset = {}) {
+// Eintrag auf der Liste antippen
+function openListItem(id) {
   const item = get('item', id);
   if (!item) return;
-  const e = listOpen(id);
-  const ctx = preset.forceList ? 'liste' : UI.tab;
-  const unit = preset.unit || (e ? e.unit : item.unit);
-  if (ctx === 'lager') { openStock(id); return; }
   const st = stockState(id);
-  const status = [st ? 'Im Lager: ' + STATE_LABEL[st] + '.' : 'Nicht im Lager.', e ? 'Auf der Liste: ' + fmtAmt(e.qty, e.unit) + '.' : ''].join(' ');
-  openSheet(`<h2>${esc(item.name)}</h2><p class="sub">${esc(status)}</p>
-    <div class="field"><span>Wie viel für die Liste?</span>${stepper(preset.qty > 0 ? preset.qty : null)}</div>
-    <div class="field"><span>Einheit</span>${unitChips(unit)}</div>
-    <p class="err" id="fErr" hidden></p>
-    <div class="actions two"><button class="btn primary" type="button" data-act="asklist" data-id="${esc(id)}">Auf die Liste</button>
-      <button class="btn" type="button" data-act="askstock" data-id="${esc(id)}">Ist im Lager</button></div>
-    <div class="actions"><button class="btn quiet" type="button" data-act="edititem" data-id="${esc(id)}">Artikel bearbeiten</button></div>`, 'ask');
-  const inp = $('#fQty'); if (inp) inp.focus();
+  openSheet(`<h2>${esc(item.name)}</h2><p class="sub">${esc(catName(catOf(item)))}${st ? '. Im Lager: ' + STATE_LABEL[st] : ''}.</p>
+    <div class="actions">
+      <button class="btn" type="button" data-act="unlist" data-id="${esc(id)}">Von der Liste nehmen</button>
+      <button class="btn" type="button" data-act="stockedit" data-id="${esc(id)}">Lager-Zustand</button>
+      <button class="btn quiet" type="button" data-act="edititem" data-id="${esc(id)}">Artikel bearbeiten</button>
+    </div>`, 'listitem');
+}
+// Früher „Wie viel?“: jetzt direkt auf die Liste, im Lager-Bereich der Zustandsdialog
+function openAsk(id, preset = {}) {
+  const ctx = preset.forceList ? 'liste' : UI.tab;
+  if (ctx === 'lager') { openStock(id); return; }
+  addToList(id);
 }
 
 // Lager-Eintrag: Zustand wählen
@@ -657,9 +639,9 @@ function openStock(id) {
   const btn = (v, label) => `<button class="stbtn ${v}" type="button" data-act="setstate" data-id="${esc(id)}" data-v="${v}" aria-pressed="${st === v}">${label}</button>`;
   openSheet(`<h2>${esc(item.name)}</h2><p class="sub">${esc(sub)}</p>
     <div class="statepick">${btn('da', 'Da')}${btn('knapp', 'Wird knapp')}${btn('leer', 'Leer oder futsch')}</div>
-    <p class="hint">„Wird knapp“ und „Leer oder futsch“ setzen ${esc(item.name)} automatisch auf die Liste (${esc(fmtAmt(item.qty, item.unit))})${e ? ', dort steht es schon' : ''}.</p>
+    <p class="hint">„Wird knapp“ und „Leer oder futsch“ setzen ${esc(item.name)} automatisch auf die Liste${e ? ', dort steht es schon' : ''}.</p>
     <div class="actions">
-      <button class="btn" type="button" data-act="asktolist" data-id="${esc(id)}">Andere Menge auf die Liste</button>
+      ${e ? '' : `<button class="btn" type="button" data-act="addlist" data-id="${esc(id)}">Auf die Liste setzen</button>`}
       ${s ? `<button class="btn danger" type="button" data-act="unstock" data-id="${esc(id)}">Aus dem Lager entfernen</button>` : ''}
       <button class="btn quiet" type="button" data-act="edititem" data-id="${esc(id)}">Artikel bearbeiten</button>
     </div>`, 'stock');
@@ -667,17 +649,14 @@ function openStock(id) {
 
 function openItemEditor(id, preset) {
   const item = id ? get('item', id) : null;
-  const d = item || Object.assign({ name: '', cat: 'c-sonst', qty: 1, unit: 'Stk' }, preset || {});
+  const d = item || Object.assign({ name: '', cat: 'c-sonst' }, preset || {});
   const ask = (!item && preset) || {};
   openSheet(`<h2>${item ? 'Artikel bearbeiten' : 'Neuer Artikel'}</h2>
     <label class="field"><span>Name</span><input id="fName" class="text" value="${esc(d.name)}" autocomplete="off" maxlength="60"></label>
     <div class="field"><span>Kategorie (bestimmt den Platz auf der Einkaufsliste)</span>${catChips(d.cat)}</div>
-    <div class="field"><span>Übliche Einkaufsmenge</span>${stepper(d.qty)}</div>
-    <div class="field"><span>Einheit</span>${unitChips(d.unit)}</div>
-    <p class="hint">Die übliche Menge kommt auf die Liste, wenn der Artikel im Lager knapp wird.</p>
     <p class="err" id="fErr" hidden></p>
     <div class="actions">
-      <button class="btn primary" type="button" data-act="saveitem" data-id="${esc(id || '')}" data-askq="${esc(ask.askQty || '')}" data-asku="${esc(ask.askUnit || '')}">${item ? 'Speichern' : 'Anlegen'}</button>
+      <button class="btn primary" type="button" data-act="saveitem" data-id="${esc(id || '')}" data-after="${esc(ask.after || '')}">${item ? 'Speichern' : 'Anlegen'}</button>
       ${item ? `<button class="btn danger" type="button" data-act="delitem" data-id="${esc(id)}">Aus dem Fundus löschen</button>` : ''}
     </div>`, 'item');
   if (!item && !d.name) { const n = $('#fName'); if (n) n.focus(); }
@@ -821,10 +800,8 @@ function quickAdd() {
   if (!p.name) return;
   const exact = findItem(p.name);
   if (exact) {
-    const u = p.unit || exact.unit;
-    if (p.qty && UI.tab === 'liste') { addToList(exact.id, p.qty, u); clearQuery(true); }
-    else if (UI.tab === 'lager') { setState(exact.id, 'da'); clearQuery(true); }
-    else openAsk(exact.id, p.qty ? { qty: p.qty, unit: u } : {});
+    if (UI.tab === 'lager') setState(exact.id, 'da'); else addToList(exact.id);
+    clearQuery(true);
     return;
   }
   createFromQuery();
@@ -833,22 +810,11 @@ function createFromQuery() {
   const p = parseEntry(UI.q);
   if (!p.name) return;
   const name = p.name.charAt(0).toUpperCase() + p.name.slice(1);
-  openItemEditor(null, { name, cat: guessCat(name), qty: p.qty || 1, unit: p.unit || 'Stk', askQty: p.qty || null, askUnit: p.qty ? (p.unit || 'Stk') : null });
+  openItemEditor(null, { name, cat: guessCat(name), after: UI.tab === 'lager' ? 'lager' : UI.tab === 'liste' ? 'liste' : '' });
 }
 function clearQuery(keepFocus) {
   UI.q = ''; $('#q').value = ''; render();
   if (keepFocus) $('#q').focus(); else $('#q').blur();
-}
-
-function askDone(b, where) {
-  if (where === 'lager') { const fs = !!UI.q; closeSheet(); setState(b.dataset.id, 'da'); if (fs) clearQuery(true); return; }
-  const q = readQty(), u = picked('unit');
-  if (!(q > 0)) { showErr('Bitte eingeben, wie viel. Die Menge muss größer als null sein.'); const i = $('#fQty'); if (i) i.focus(); return; }
-  if (!u) return showErr('Bitte eine Einheit wählen.');
-  const fromSearch = !!UI.q;
-  closeSheet();
-  addToList(b.dataset.id, q, u);
-  if (fromSearch) clearQuery(true);
 }
 
 const actions = {
@@ -857,12 +823,12 @@ const actions = {
     if (row) { row.classList.toggle('done'); }
     setTimeout(() => toggleCheck(b.dataset.id), matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 260);
   },
-  amount: (b) => openAmount(b.dataset.id),
+  listitem: (b) => openListItem(b.dataset.id),
   ask: (b) => openAsk(b.dataset.id),
-  asklist: (b) => askDone(b, 'liste'),
-  askstock: (b) => askDone(b, 'lager'),
-  asktolist: (b) => openAsk(b.dataset.id, { forceList: true }),
-  stockedit: (b) => openStock(b.dataset.id),
+  addlist: (b) => { closeSheet(); addToList(b.dataset.id); },
+  togglelist: (b) => { toggleList(b.dataset.id); if (UI.q) clearQuery(true); },
+  togglestock: (b) => { if (inStock(b.dataset.id) && get('stock', b.dataset.id)) openStock(b.dataset.id); else { setState(b.dataset.id, 'da'); if (UI.q) clearQuery(true); } },
+  stockedit: (b) => { closeSheet(); openStock(b.dataset.id); },
   startcheck: () => { UI.checked = { da: 0, leer: 0 }; openCheck(); },
   snoozecheck: () => { S.checkSnooze = todayKey(); save(); render(); },
   checkda: (b) => { confirmStock(b.dataset.id); UI.checked.da++; openCheck(); },
@@ -894,36 +860,26 @@ const actions = {
     q = Math.max(zero ? 0 : st, q);
     $('#fQty').value = fmtQty(Math.round(q * 1000) / 1000);
   },
-  saveamount: (b) => {
-    const q = readQty(), u = picked('unit');
-    if (!(q > 0)) return showErr('Bitte eine Menge größer als null eingeben.');
-    if (!u) return showErr('Bitte eine Einheit wählen.');
-    closeSheet();
-    const e = get('list', b.dataset.id);
-    if (e && !e.checked) tx(() => put('list', Object.assign({}, e, { qty: q, unit: u })));
-    else addToList(b.dataset.id, q, u);
-  },
   unlist: (b) => { closeSheet(); removeFromList(b.dataset.id); },
   saveitem: (b) => {
     const name = $('#fName').value.trim().replace(/\s+/g, ' ');
-    const q = readQty(), u = picked('unit'), cat = picked('cat') || 'c-sonst';
+    const cat = picked('cat') || 'c-sonst';
     if (!name) return showErr('Bitte einen Namen eingeben.');
-    if (!(q > 0)) return showErr('Bitte eine übliche Menge größer als null eingeben.');
-    if (!u) return showErr('Bitte eine Einheit wählen.');
     const id = b.dataset.id;
     const dupe = findItem(name);
     if (dupe && dupe.id !== id && norm(dupe.name) === norm(name)) return showErr('„' + dupe.name + '“ gibt es schon im Fundus.');
     closeSheet();
     if (id) {
       const it = get('item', id);
-      tx(() => put('item', Object.assign({}, it, { name, cat, qty: q, unit: u })));
+      tx(() => put('item', Object.assign({}, it, { name, cat })));
       toast(name + ' gespeichert');
     } else {
       const nid = 'u-' + rid(10);
-      tx(() => put('item', { id: nid, name, cat, qty: q, unit: u, uses: 0, created: Date.now() }));
+      const undo = tx(() => put('item', { id: nid, name, cat, qty: 1, unit: 'Stk', uses: 0, created: Date.now() }));
       if (UI.q) { UI.q = ''; $('#q').value = ''; render(); }
-      // gleich weiter: wie viel und wohin?
-      openAsk(nid, { qty: parseNum(b.dataset.askq) || null, unit: b.dataset.asku || u });
+      if (b.dataset.after === 'liste') addToList(nid);
+      else if (b.dataset.after === 'lager') setState(nid, 'da');
+      else toast(name + ' ist im Fundus', undo);
     }
   },
   delitem: (b) => {

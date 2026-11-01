@@ -421,3 +421,13 @@ main { padding: 0 16px; outline: 0; }
 .cookpick .chip { height: 42px; font-size: 16px; }
 .cookpick .chip[aria-pressed="true"] { background: var(--danger); border-color: var(--danger); color: #fff; }
 @media (max-width: 370px) { .stq { padding: 0 9px; font-size: 13px; } }
+
+/* ── Fundus ohne Mengen: Schalter Liste / Lager ── */
+.fundrow { gap: 4px; }
+.tgl {
+  flex: none; height: 36px; min-width: 58px; padding: 0 10px; border-radius: 18px; border: 1.5px solid var(--line);
+  background: transparent; font-size: 14px; font-weight: 600; color: var(--muted);
+}
+.tgl[aria-pressed="true"] { background: var(--lemon); border-color: var(--lemon); color: #3a3000; }
+.tgl[data-act="togglestock"][aria-pressed="true"] { background: color-mix(in srgb, var(--leaf) 18%, transparent); border-color: color-mix(in srgb, var(--leaf) 45%, transparent); color: var(--leaf); }
+@media (max-width: 370px) { .tgl { min-width: 0; padding: 0 8px; font-size: 13px; } .fundrow .edit { width: 36px; } }

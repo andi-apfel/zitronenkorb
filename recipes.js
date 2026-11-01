@@ -110,9 +110,7 @@ function needStatus(n) {
   const r = Object.assign({}, n, { name: item.name, have: avail ? { state: st || 'da', basic: !st } : null, onList: e, missing: avail ? null : n.qty });
   r.state = avail ? 'have' : 'missing';
   // Einkaufsmenge: benötigte Menge, wenn sie sich so kaufen lässt, sonst die übliche Einkaufsmenge
-  if (!avail && n.qty != null && !n.mixed && PURCHASE.has(n.unit)) { r.buyQty = roundUp(n.qty, n.unit); r.buyUnit = n.unit; }
-  else { r.buyQty = item.qty; r.buyUnit = item.unit; }
-  if (e) { const c = convert(r.buyQty, r.buyUnit, e.unit); r.covered = c == null || e.qty >= c - 1e-9; }
+  r.covered = !!e;
   r.pick = !avail && !r.covered;
   return r;
 }
@@ -339,7 +337,7 @@ function openShop(title, entries) {
     <ul class="rows shop">${rows.map((x, i) => `<li class="row">
       <button class="check" type="button" data-act="shoptoggle" data-i="${i}" aria-pressed="${x.pick}" aria-label="${esc(x.name)} ${x.pick ? 'abwählen' : 'auswählen'}">${SLICE.replace('class="slice"', 'class="slice' + (x.pick ? ' on' : '') + '"')}</button>
       <span class="main static"><span class="stack"><span class="name">${esc(x.name)}</span><span class="tags">${statusTag(x)}</span></span>
-      <span class="amt">${esc(fmtAmt(x.buyQty, x.buyUnit))}</span></span></li>`).join('')}</ul>
+</span></li>`).join('')}</ul>
     <div class="actions"><button class="btn primary" type="button" data-act="shopgo" id="shopGo"></button>
       <button class="btn quiet" type="button" data-act="${UI.rv ? 'backrecipe' : 'close'}">Zurück</button></div>`, 'shop');
   updateShopButton();
@@ -393,7 +391,7 @@ Object.assign(actions, {
     const picked = (UI.shop || []).filter((x) => x.pick);
     if (!picked.length) return;
     closeSheet();
-    const undo = tx(() => picked.forEach((x) => addToList(x.item, x.buyQty, x.buyUnit, { silent: true })));
+    const undo = tx(() => picked.forEach((x) => addToList(x.item, { silent: true })));
     toast(picked.length + (picked.length === 1 ? ' Zutat steht' : ' Zutaten stehen') + ' jetzt auf der Liste', undo);
   },
   cook: () => { const v = UI.rv; if (!v) return; closeSheet(); cook(v.id, v.serv, v.date, v.idx); },
